@@ -88,7 +88,9 @@ function showTour() {
     ['Einladen', 'Im Board auf die Personen-Symbole klicken, eine neue E-Mail-Adresse einladen und im Postausgang die Einladung als eingeladene Person öffnen.', null],
     ['Rollen erleben', 'Oben „Ansicht als“ auf Dr. Anna Krüger (Schulleitung, liest mit) oder Thomas Becker (verbindet seine Nextcloud unter „Konto“) stellen.', null],
     ['Meine Aufgaben', 'Alles, was der gewählten Person zugewiesen ist, über alle Boards hinweg.', '#/tasks'],
-    ['Feedback geben', 'Unten rechts Ideen, Probleme und Fragen sammeln und für die Wünsche anderer stimmen. Das sehen alle, die diese Seite geöffnet haben.', null],
+    window.claude
+      ? ['Feedback geben', 'Unten rechts Ideen, Probleme und Fragen sammeln und für die Wünsche anderer stimmen. Das sehen alle, die diese Seite geöffnet haben.', null]
+      : ['Notizen machen', 'Unten rechts „Meine Notizen“: festhalten, was euch fehlt, stört oder gefällt – mit Bezug auf die Stelle in der App. Danach kopieren und teilen oder in der Runde vorstellen.', null],
   ];
   const m = openModal({
     title: 'Rundgang durch den Klick-Dummy', wide: true,
@@ -107,7 +109,8 @@ if (!toured) setTimeout(showTour, 700);
 
 // ---------------- Gemeinsames Feedback ----------------
 const KINDS = { idee: 'Idee', problem: 'Problem', frage: 'Frage', gut: 'Gefällt mir' };
-const fb = { db: null, user: null, uid: null, canWrite: true, items: [], votes: new Map(), loading: true, stale: false, error: null, open: false, sort: 'votes', kind: 'idee' };
+const LOCAL_KEY = 'seb-klickdummy-notizen';
+const fb = { local: false, db: null, user: null, uid: null, canWrite: true, items: [], votes: new Map(), loading: true, stale: false, error: null, open: false, sort: 'votes', kind: 'idee' };
 
 const fab = h('button', { class: 'fb-fab', 'aria-expanded': 'false', 'aria-controls': 'fb-panel', onclick: () => toggle() }, icon('comment', 18), h('span', { class: 'fb-fab-label' }, 'Feedback & Ideen'), h('span', { class: 'fb-count' }));
 const panel = h('aside', { id: 'fb-panel', class: 'fb-panel', 'aria-label': 'Feedback & Ideen', hidden: true });
@@ -146,13 +149,15 @@ async function render() {
   const ps = fb.user && authorIds.length ? await fb.user.profiles(authorIds) : {};
 
   const head = h('div', { class: 'fb-head' },
-    h('div', {}, h('h2', {}, 'Feedback & Ideen'), h('p', { class: 'muted small' }, 'Gemeinsam für alle, die diesen Klick-Dummy geöffnet haben.')),
+    fb.local
+      ? h('div', {}, h('h2', {}, 'Meine Notizen'), h('p', { class: 'muted small' }, 'Nur auf diesem Gerät gespeichert. Zum Teilen kopieren oder in der Runde vorstellen.'))
+      : h('div', {}, h('h2', {}, 'Feedback & Ideen'), h('p', { class: 'muted small' }, 'Gemeinsam für alle, die diesen Klick-Dummy geöffnet haben.')),
     h('button', { class: 'icon-btn', 'aria-label': 'Schließen', onclick: () => toggle(false) }, icon('x', 20)));
 
   let form = null;
-  if (!fb.db) {
+  if (!fb.db && !fb.local) {
     form = h('p', { class: 'fb-note' }, fb.loading ? 'Verbinde …' : 'Das gemeinsame Feedback ist nur verfügbar, wenn die Seite auf claude.ai geöffnet ist und du angemeldet bist.');
-  } else if (!fb.canWrite || !fb.uid) {
+  } else if (!fb.local && (!fb.canWrite || !fb.uid)) {
     form = h('p', { class: 'fb-note' }, 'Du kannst das Feedback lesen. Zum Mitschreiben braucht dein Zugang mindestens die Rolle „Mitwirkende/r“ – bitte bei der Person nachfragen, die den Link geteilt hat.');
   } else {
     const ta = h('textarea', { id: 'fb-text', rows: 3, maxlength: 1000, placeholder: 'Was fehlt, was stört, was ist gut?', 'aria-label': 'Feedback' });
@@ -168,7 +173,16 @@ async function render() {
         if (!text) return;
         const btn = e.submitter; if (btn) btn.disabled = true;
         try {
-          await fb.db.collection('feedback').add({ text, kind: fb.kind, context: ctxBox.checked ? ctx : '', authorId: fb.uid, createdAt: Date.now() });
+          const entry = { text, kind: fb.kind, context: ctxBox.checked ? ctx : '', authorId: fb.uid, createdAt: Date.now() };
+          if (fb.local) {
+            fb.items.push({ id: `n${Date.now()}`, ...entry });
+            saveLocal();
+            draft.text = '';
+            render();
+            toast('Notiz gespeichert.', 'success');
+            return;
+          }
+          await fb.db.collection('feedback').add(entry);
           draft.text = '';
           toast('Danke! Dein Feedback ist für alle sichtbar.', 'success');
         } catch (err) {
@@ -183,7 +197,7 @@ async function render() {
     }, label))),
     ta,
     h('label', { class: 'fb-ctx small', for: 'fb-ctx' }, ctxBox, ` Bezug: ${ctx}`),
-    h('button', { class: 'btn btn-primary', type: 'submit' }, 'Teilen'));
+    h('button', { class: 'btn btn-primary', type: 'submit' }, fb.local ? 'Notieren' : 'Teilen'));
   }
 
   const status = fb.error ? h('p', { class: 'form-error small' }, fb.error)
@@ -192,10 +206,10 @@ async function render() {
   const list = h('ul', { class: 'fb-list' }, items.map((it) => {
     const n = votesFor(it.id);
     const voted = mine.includes(it.id);
-    const name = ps[it.authorId]?.name || 'Jemand';
-    const canDelete = fb.uid && (it.authorId === fb.uid || fb.isOwner);
+    const name = fb.local ? 'Ich' : ps[it.authorId]?.name || 'Jemand';
+    const canDelete = fb.local || (fb.uid && (it.authorId === fb.uid || fb.isOwner));
     return h('li', { class: 'fb-item' },
-      h('button', {
+      fb.local ? null : h('button', {
         class: `fb-vote ${voted ? 'on' : ''}`, 'aria-pressed': String(voted), disabled: !fb.uid || !fb.canWrite,
         title: voted ? 'Stimme zurücknehmen' : 'Wichtig für mich', 'aria-label': `${n} Stimmen. ${voted ? 'Stimme zurücknehmen' : 'Dafür stimmen'}`,
         onclick: () => vote(it.id, !voted),
@@ -211,9 +225,10 @@ async function render() {
     h('option', { value: 'votes', selected: fb.sort === 'votes' }, 'Meiste Stimmen'), h('option', { value: 'new', selected: fb.sort === 'new' }, 'Neueste zuerst'));
 
   put(clear(panel), head, form,
-    fb.db ? h('div', { class: 'fb-listhead' }, h('strong', {}, `${fb.items.length} ${fb.items.length === 1 ? 'Eintrag' : 'Einträge'}`), sortSel) : null,
+    fb.db || fb.local ? h('div', { class: 'fb-listhead' }, h('strong', {}, `${fb.items.length} ${fb.items.length === 1 ? 'Eintrag' : 'Einträge'}`),
+      fb.local ? h('button', { class: 'btn btn-sm', disabled: !fb.items.length, onclick: copyNotes }, 'Alle kopieren') : sortSel) : null,
     status,
-    fb.items.length ? list : (fb.db && !fb.loading ? h('p', { class: 'muted fb-empty' }, 'Noch kein Feedback. Schreib den ersten Eintrag – z. B. eine Funktion, die euch in der Steuergruppe fehlt.') : null));
+    fb.items.length ? list : ((fb.db || fb.local) && !fb.loading ? h('p', { class: 'muted fb-empty' }, fb.local ? 'Noch keine Notizen. Was fehlt euch, was stört, was gefällt?' : 'Noch kein Feedback. Schreib den ersten Eintrag – z. B. eine Funktion, die euch in der Steuergruppe fehlt.') : null));
   const ta = panel.querySelector('#fb-text');
   if (ta && document.activeElement === document.body) ta.focus();
 }
@@ -229,7 +244,27 @@ async function vote(fid, add) {
   voteBusy = false;
 }
 
+function saveLocal() {
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(fb.items)); } catch { /* privates Fenster: nur im Speicher */ }
+}
+
+async function copyNotes() {
+  const text = [...fb.items].sort((a, b) => a.createdAt - b.createdAt)
+    .map((i) => `• [${KINDS[i.kind] || 'Idee'}] ${i.text}${i.context ? ` (${i.context})` : ''}`).join('\n');
+  const full = `Notizen zum Klick-Dummy Schulentwicklungsboards\n\n${text}`;
+  try {
+    await navigator.clipboard.writeText(full);
+    toast('Notizen kopiert – z. B. in eine Mail oder den Chat einfügen.', 'success');
+  } catch {
+    const ta = h('textarea', { rows: 10, readOnly: true, 'aria-label': 'Notizen' });
+    ta.value = full;
+    openModal({ title: 'Notizen zum Kopieren', content: [h('p', { class: 'hint' }, 'Text markieren und kopieren.'), ta] });
+    ta.select();
+  }
+}
+
 async function remove(fid) {
+  if (fb.local) { fb.items = fb.items.filter((i) => i.id !== fid); saveLocal(); render(); return; }
   try { await fb.db.doc(`feedback/${fid}`).delete(); } catch { toast('Löschen hat nicht geklappt.', 'error'); }
 }
 
@@ -239,7 +274,13 @@ async function remove(fid) {
   fb.loading = false;
   fb.db = db;
   fb.user = user;
-  if (!db) { render(); return; }
+  if (!db) {
+    fb.local = true;
+    try { fb.items = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); } catch { fb.items = []; }
+    fab.querySelector('.fb-fab-label').textContent = 'Meine Notizen';
+    render();
+    return;
+  }
   if (user) {
     fb.uid = await user.id();
     const can = await user.can?.('data.write');

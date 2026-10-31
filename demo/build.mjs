@@ -18,4 +18,10 @@ const page = fs.readFileSync(path.join(root, 'demo', 'page.html'), 'utf8');
 fs.writeFileSync(path.join(out, 'index.html'), page);
 // standalone.html = eigenständig im Browser oder über einen beliebigen Webserver nutzbar
 fs.writeFileSync(path.join(out, 'standalone.html'), `<!doctype html>\n<html lang="de">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
+// pages/ = fertige statische Webseite (z. B. für GitHub Pages oder jeden Webserver), ohne Anmeldung nutzbar
+const pages = path.join(root, 'dist', 'pages');
+fs.rmSync(pages, { recursive: true, force: true });
+fs.cpSync(out, pages, { recursive: true });
+fs.renameSync(path.join(pages, 'standalone.html'), path.join(pages, 'index.html'));
+fs.writeFileSync(path.join(pages, '.nojekyll'), '');
 console.log(`Klick-Dummy gebaut: ${path.relative(root, out)}/`);
