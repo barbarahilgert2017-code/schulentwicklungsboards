@@ -65,6 +65,8 @@ npm run build:demo        # → dist/klickdummy/
 cd dist/klickdummy && python3 -m http.server 8000   # dann http://localhost:8000/standalone.html
 ```
 
+**Öffentlich, ohne Anmeldung:** https://barbarahilgert2017-code.github.io/schulentwicklungsboards/ (Branch `gh-pages`, nur erfundene Beispieldaten). Aktualisieren: `npm run build:demo`, dann den Inhalt von `dist/pages/` auf den Branch `gh-pages` legen. Dort gibt es statt des gemeinsamen Feedbacks „Meine Notizen“ pro Gerät mit „Alle kopieren“.
+
 Die Quellen liegen in [`demo/`](demo/) (`mock-api.js` bildet die REST-API im Browser nach). Änderungen bleiben im Browser der jeweiligen Person.
 
 ## Betrieb in Deutschland
