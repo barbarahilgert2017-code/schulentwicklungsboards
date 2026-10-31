@@ -121,6 +121,12 @@ function boardMenu(anchor) {
     { label: 'Als JSON exportieren', icon: 'download', onClick: async () => {
       try {
         const data = await api.get(`/boards/${b.id}/export`);
+        if (state.config.demo) {
+          const ta = h('textarea', { rows: 16, readOnly: true, class: 'export-json', 'aria-label': 'Export als JSON' });
+          ta.value = JSON.stringify(data, null, 2);
+          openModal({ title: 'Export (JSON)', wide: true, content: [h('p', { class: 'hint' }, 'In der echten App wird diese Datei heruntergeladen. Im Klick-Dummy wird sie hier angezeigt.'), ta] });
+          return;
+        }
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
         const a = h('a', { href: url, download: `${b.title.replace(/[^\wäöüÄÖÜß -]+/g, '_')}.json` });
         document.body.append(a); a.click(); a.remove();

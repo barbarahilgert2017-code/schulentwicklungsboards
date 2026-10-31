@@ -1,0 +1,101 @@
+/* Klick-Dummy: Demo-Leiste und Feedback-Panel. Nutzt die Farb-Tokens aus app.css. */
+:root {
+  --demo-bg: #fff3d1;
+  --demo-fg: #5b4300;
+  --demo-border: #e8cf86;
+  --demo-tag: #8a6400;
+  --fb-idee: #2f6f9f;
+  --fb-problem: #b03a2e;
+  --fb-frage: #7b4fa0;
+  --fb-gut: #2e7d4f;
+  --demo-bar-h: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --demo-bg: #3a3016; --demo-fg: #f3dc9a; --demo-border: #6b5a26; --demo-tag: #e0b84a;
+    --fb-idee: #5ea3d6; --fb-problem: #e0645a; --fb-frage: #b48ad6; --fb-gut: #4caf78;
+  }
+}
+:root[data-theme="dark"] {
+  --demo-bg: #3a3016; --demo-fg: #f3dc9a; --demo-border: #6b5a26; --demo-tag: #e0b84a;
+  --fb-idee: #5ea3d6; --fb-problem: #e0645a; --fb-frage: #b48ad6; --fb-gut: #4caf78;
+}
+
+.demo-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem;
+  padding-block: .4rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--demo-bg); color: var(--demo-fg); border-bottom: 1px solid var(--demo-border);
+  font-size: .88rem;
+}
+.demo-tag { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; color: var(--demo-tag); border: 1px solid currentColor; border-radius: 4px; padding: .05rem .4rem; }
+.demo-note { flex: 1 1 220px; min-width: 0; }
+.demo-persona { font-weight: 600; }
+.demo-bar select { width: auto; max-width: 100%; padding: .2rem .4rem; font-size: .85rem; }
+.demo-actions { display: flex; gap: .35rem; flex-wrap: wrap; }
+.demo-btn { border: 1px solid var(--demo-border); background: transparent; color: var(--demo-fg); border-radius: 5px; padding: .2rem .55rem; font: inherit; cursor: pointer; }
+.demo-btn:hover { background: color-mix(in srgb, var(--demo-fg) 10%, transparent); }
+
+body.demo .topbar { top: env(safe-area-inset-top, 0px); }
+body.demo .board-page { height: calc(100vh - 48px - var(--demo-bar-h)); }
+.export-json { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .8rem; }
+
+.tour { padding-left: 1.4rem; display: flex; flex-direction: column; gap: .6rem; }
+.tour li > * { vertical-align: top; }
+.tour li { padding-left: .2rem; }
+.tour li > div { display: inline-block; width: calc(100% - 4.5rem); }
+.tour li > button { float: right; }
+.tour p { margin: .1rem 0 0; }
+
+.outbox { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1rem; }
+.outbox li { border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem; display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.outbox-head { display: flex; flex-direction: column; gap: .1rem; }
+.outbox-text { white-space: pre-wrap; font: inherit; font-size: .88rem; margin: 0; color: var(--text); overflow-wrap: anywhere; }
+
+/* ---- Feedback ---- */
+.fb-fab {
+  position: fixed; z-index: 40;
+  right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; gap: .45rem; padding: .6rem .95rem; border-radius: 999px;
+  border: 1px solid var(--demo-border); background: var(--demo-bg); color: var(--demo-fg);
+  font: inherit; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-lg);
+}
+.fb-count:not(:empty) { background: var(--demo-fg); color: var(--demo-bg); border-radius: 999px; padding: 0 .45rem; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.fb-panel {
+  position: fixed; z-index: 45; top: 0; right: 0; bottom: 0; width: min(420px, 100vw);
+  background: var(--surface); color: var(--text); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: .75rem; overflow-y: auto;
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding-left: 1.1rem; padding-right: max(1.1rem, env(safe-area-inset-right, 0px));
+}
+.fb-head { display: flex; justify-content: space-between; gap: .5rem; align-items: flex-start; }
+.fb-head h2 { margin: 0; }
+.fb-head p { margin: .15rem 0 0; }
+.fb-note { background: var(--surface-2); border-radius: 8px; padding: .65rem .8rem; font-size: .9rem; }
+.fb-form { display: flex; flex-direction: column; gap: .5rem; }
+.fb-form .btn { align-self: flex-end; }
+.fb-kinds { display: flex; gap: .3rem; flex-wrap: wrap; }
+.fb-kind { --k: var(--muted); border: 1px solid var(--k); color: var(--k); background: transparent; border-radius: 999px; padding: .15rem .6rem; font: inherit; font-size: .82rem; cursor: pointer; }
+.fb-kind.on { background: var(--k); color: var(--surface); }
+.fb-kind-idee { --k: var(--fb-idee); } .fb-kind-problem { --k: var(--fb-problem); } .fb-kind-frage { --k: var(--fb-frage); } .fb-kind-gut { --k: var(--fb-gut); }
+.fb-ctx { display: flex; gap: .35rem; align-items: center; color: var(--muted); }
+.fb-listhead { display: flex; justify-content: space-between; align-items: center; gap: .5rem; border-top: 1px solid var(--border); padding-top: .75rem; }
+.fb-listhead select { width: auto; padding: .2rem .4rem; }
+.fb-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .55rem; }
+.fb-item { display: flex; gap: .65rem; align-items: flex-start; padding: .6rem; border-radius: 8px; background: var(--surface-2); }
+.fb-vote { display: flex; flex-direction: column; align-items: center; min-width: 2.6rem; padding: .25rem .2rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fb-vote.on { border-color: var(--primary); color: var(--primary); }
+.fb-vote:disabled { cursor: default; opacity: .7; }
+.fb-arrow { font-size: .7rem; line-height: 1; }
+.fb-body { flex: 1; min-width: 0; }
+.fb-meta { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; }
+.fb-chip { --k: var(--muted); color: var(--k); border: 1px solid var(--k); border-radius: 999px; font-size: .72rem; padding: 0 .45rem; font-weight: 600; }
+.fb-text { margin: .3rem 0 .15rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-body p.small { margin: 0 0 .2rem; }
+.fb-empty { text-align: center; padding: 1rem 0; }
+
+@media (max-width: 760px) {
+  .fb-fab-label { display: none; }
+  .demo-note { display: none; }
+}

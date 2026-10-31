@@ -12,7 +12,8 @@
     "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
     "backup": "node --disable-warning=ExperimentalWarning server/backup.js",
-    "cli": "node --disable-warning=ExperimentalWarning server/cli.js"
+    "cli": "node --disable-warning=ExperimentalWarning server/cli.js",
+    "build:demo": "node demo/build.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

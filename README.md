@@ -56,6 +56,17 @@ npm run cli -- list-users
 npm run cli -- reset-password person@schule.de
 ```
 
+## Klick-Dummy
+
+Für Workshops und Abstimmungsrunden gibt es eine Demo-Version ohne Server: die echte Oberfläche mit Beispieldaten einer fiktiven Schule, simulierter Nextcloud und simuliertem E-Mail-Versand (Postausgang). Über „Ansicht als“ lässt sich die Rolle wechseln (Koordination, Fachschaft, Schulleitung mit Leserechten, Medienbeauftragter).
+
+```bash
+npm run build:demo        # → dist/klickdummy/
+cd dist/klickdummy && python3 -m http.server 8000   # dann http://localhost:8000/standalone.html
+```
+
+Die Quellen liegen in [`demo/`](demo/) (`mock-api.js` bildet die REST-API im Browser nach). Änderungen bleiben im Browser der jeweiligen Person.
+
 ## Betrieb in Deutschland
 
 Produktiv mit Docker Compose und Caddy (automatisches HTTPS):
