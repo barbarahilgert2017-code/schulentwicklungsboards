@@ -28,6 +28,8 @@ export const describeActivity = (a) => {
     case 'comment.added': return 'hat kommentiert';
     case 'attachment.added': return `hat „${d.name}“ angehängt`;
     case 'member.added': return `hat ${d.name} zum Board hinzugefügt`;
+    case 'member.invited': return `hat ${d.email} eingeladen`;
+    case 'member.joined': return 'ist dem Board über eine Einladung beigetreten';
     case 'member.removed': return `hat ${d.name} aus dem Board entfernt`;
     case 'folder.linked': return `hat den Nextcloud-Ordner „${d.path}“ verknüpft`;
     default: return a.action;

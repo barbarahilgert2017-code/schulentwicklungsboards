@@ -11,18 +11,22 @@ import authRoutes from './routes/auth.js';
 import nextcloudRoutes from './routes/nextcloud.js';
 import boardRoutes from './routes/boards.js';
 import cardRoutes from './routes/cards.js';
+import invitationRoutes from './routes/invitations.js';
+import { createMailer } from './mailer.js';
+import { createInvitationService } from './invitations.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp({ config, db }) {
+export function createApp({ config, db, mailer = createMailer(config) }) {
   const app = express();
   app.disable('x-powered-by');
   if (config.trustProxy) app.set('trust proxy', 1);
 
   const box = createSecretBox(config.appSecret);
-  const ctx = { db, config, box, access: createAccess(db), svc: createBoardService(db) };
+  const ctx = { db, config, box, mailer, access: createAccess(db), svc: createBoardService(db) };
   ctx.nc = createNcService(ctx);
   app.locals.nc = ctx.nc;
+  ctx.invitations = createInvitationService(ctx);
 
   // Sicherheits-Header: keine externen Quellen, kein Tracking, kein Einbetten.
   app.use((_req, res, next) => {
@@ -47,6 +51,7 @@ export function createApp({ config, db }) {
   api.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   api.use('/auth', authRoutes(ctx));
   api.use('/nextcloud', nextcloudRoutes(ctx));
+  api.use(invitationRoutes(ctx)); // enthält öffentliche Routen → vor den Routern mit Login-Pflicht
   api.use(boardRoutes(ctx));
   api.use(cardRoutes(ctx));
   api.use((_req, _res, next) => next(Object.assign(new Error('Nicht gefunden.'), { status: 404 })));

@@ -84,15 +84,62 @@ export function openBoardSettings(data, tab = 'general', onChange) {
         class: 'inline-form',
         onsubmit: run(async (e) => {
           e.preventDefault();
-          await api.post(`/boards/${d.board.id}/members`, { email: email.value, role: role.value });
-          toast('Mitglied hinzugefügt.');
+          const r = await api.post(`/boards/${d.board.id}/members`, { email: email.value, role: role.value });
+          if (r.status === 'invited') showInviteLink(r, email.value);
+          else toast(`${r.name} wurde hinzugefügt${r.mailed ? ' und per E-Mail benachrichtigt' : ''}.`, 'success');
         }),
-      }, email, role, h('button', { class: 'btn btn-primary', type: 'submit' }, 'Hinzufügen')) : null,
+      }, email, role, h('button', { class: 'btn btn-primary', type: 'submit' }, 'Hinzufügen / Einladen')) : null,
+      owner() ? pendingInvites() : null,
       h('p', { class: 'hint' },
         'Rollen: ', h('strong', {}, 'Verantwortlich'), ' – alles inkl. Mitglieder und Nextcloud-Ordner; ',
         h('strong', {}, 'Bearbeiten'), ' – Karten, Listen, Checklisten, Dateien; ',
         h('strong', {}, 'Lesen'), ' – ansehen und kommentieren (z. B. für Schulleitung oder Kollegium).'),
-      owner() ? h('p', { class: 'hint' }, 'Neue Mitglieder müssen sich vorher einmal registriert haben.') : null);
+      owner() ? h('p', { class: 'hint' }, state.config.mailEnabled
+        ? 'Personen ohne Konto erhalten eine Einladung per E-Mail. Personen mit Konto werden direkt hinzugefügt und benachrichtigt.'
+        : 'Personen ohne Konto erhalten einen Einladungslink, den du weitergeben kannst (E-Mail-Versand ist auf diesem Server nicht eingerichtet).') : null);
+  }
+
+  function pendingInvites() {
+    const box = h('div', { class: 'pending-invites' });
+    api.get(`/boards/${d.board.id}/invitations`).then((list) => {
+      if (!list.length) return;
+      put(box, h('h3', {}, 'Offene Einladungen'), h('ul', { class: 'member-list' }, list.map((inv) => h('li', {},
+        h('span', { class: 'avatar avatar-md more' }, '@'),
+        h('div', { class: 'member-info' },
+          h('strong', {}, inv.email),
+          h('span', { class: `small ${inv.expired ? 'form-error' : 'muted'}` },
+            `${ROLE_LABELS[inv.role]} · eingeladen von ${inv.invitedBy || '–'} · `,
+            inv.expired ? 'abgelaufen' : `gültig bis ${new Date(inv.expiresAt).toLocaleDateString('de-DE')}`)),
+        h('button', {
+          class: 'btn btn-sm', title: 'Neuen Link erzeugen und erneut senden',
+          onclick: run(async () => { showInviteLink(await api.post(`/invitations/${inv.id}/resend`), inv.email); }),
+        }, state.config.mailEnabled ? 'Erneut senden' : 'Neuer Link'),
+        h('button', {
+          class: 'icon-btn', 'aria-label': `Einladung an ${inv.email} zurückziehen`, title: 'Zurückziehen',
+          onclick: async () => { if (await confirmDialog(`Einladung an ${inv.email} zurückziehen?`, { ok: 'Zurückziehen', danger: true })) run(() => api.del(`/invitations/${inv.id}`))(); },
+        }, icon('x'))))));
+    }).catch(() => {});
+    return box;
+  }
+
+  function showInviteLink(r, mail) {
+    const input = h('input', { type: 'text', value: r.link, readOnly: true, 'aria-label': 'Einladungslink' });
+    openModal({
+      title: 'Einladung erstellt',
+      content: [
+        h('p', {}, r.mailed
+          ? `Eine Einladung wurde per E-Mail an ${mail} geschickt.`
+          : `Für ${mail} gibt es noch kein Konto. ${state.config.mailEnabled ? 'Die E-Mail konnte nicht verschickt werden – ' : ''}Bitte diesen Link persönlich weitergeben (z. B. per Schul-Mail oder Messenger):`),
+        h('div', { class: 'inline-form' }, input, h('button', {
+          class: 'btn btn-primary',
+          onclick: async () => {
+            try { await navigator.clipboard.writeText(r.link); } catch { input.select(); document.execCommand('copy'); }
+            toast('Link kopiert.', 'success');
+          },
+        }, 'Link kopieren')),
+        h('p', { class: 'hint' }, 'Der Link ist nur für diese Person gedacht und läuft automatisch ab. Mit dem Link kann sie sich auch registrieren, wenn die Registrierung sonst geschlossen ist.'),
+      ],
+    });
   }
 
   // ---- Labels ----

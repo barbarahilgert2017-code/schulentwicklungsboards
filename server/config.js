@@ -27,6 +27,16 @@ export function loadConfig(overrides = {}) {
     registrationDomains: list(env.REGISTRATION_EMAIL_DOMAINS),
     sessionDays: Number(env.SESSION_DAYS || 14),
     uploadMaxMb: Number(env.UPLOAD_MAX_MB || 50),
+    inviteDays: Number(env.INVITE_DAYS || 14),
+    smtp: {
+      host: env.SMTP_HOST || '',
+      port: Number(env.SMTP_PORT || 587),
+      secure: bool(env.SMTP_SECURE, false),
+      user: env.SMTP_USER || '',
+      pass: env.SMTP_PASS || '',
+      from: env.MAIL_FROM || env.SMTP_USER || '',
+    },
+    demo: false,
     nextcloud: {
       defaultUrl: (env.NEXTCLOUD_DEFAULT_URL || '').replace(/\/+$/, ''),
       allowedHosts: list(env.NEXTCLOUD_ALLOWED_HOSTS),

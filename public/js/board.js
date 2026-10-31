@@ -118,7 +118,15 @@ function boardMenu(anchor) {
     { label: 'Nextcloud-Ordner', icon: 'cloud', onClick: () => openBoardSettings(cur.data, 'folder', refresh) },
     'sep',
     { label: 'Archiv anzeigen', icon: 'archive', onClick: showArchive },
-    { label: 'Als JSON exportieren', icon: 'download', onClick: () => { window.location.href = `/api/boards/${b.id}/export`; } },
+    { label: 'Als JSON exportieren', icon: 'download', onClick: async () => {
+      try {
+        const data = await api.get(`/boards/${b.id}/export`);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        const a = h('a', { href: url, download: `${b.title.replace(/[^\wäöüÄÖÜß -]+/g, '_')}.json` });
+        document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) { showError(err); }
+    } },
     'sep',
     isOwner() ? { label: b.archived ? 'Board reaktivieren' : 'Board archivieren', icon: 'archive', onClick: async () => {
       await api.patch(`/boards/${b.id}`, { archived: !b.archived }).catch(showError); refresh();

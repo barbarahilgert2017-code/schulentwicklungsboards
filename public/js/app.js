@@ -85,6 +85,86 @@ function renderAuth() {
     box));
 }
 
+// ---------------- Einladung annehmen ----------------
+
+async function renderInvite(token) {
+  let info;
+  try {
+    info = await api.get(`/invitations/token/${encodeURIComponent(token)}`);
+  } catch (err) {
+    main.append(h('div', { class: 'empty' }, h('p', {}, err.message), h('a', { class: 'btn', href: '#/' }, 'Zur Startseite')));
+    return;
+  }
+  const ROLE = { owner: 'Verantwortlich', editor: 'Bearbeiten', viewer: 'Lesen' };
+  const box = h('div', { class: 'auth-box invite-box' });
+  const head = [
+    h('p', { class: 'muted' }, 'Einladung'),
+    h('h1', {}, info.boardTitle),
+    h('p', {}, `${info.inviter || 'Jemand'} lädt dich ein mitzuarbeiten – Rolle: `, h('strong', {}, ROLE[info.role])),
+  ];
+  main.append(h('div', { class: 'invite-page' }, box));
+
+  const done = (boardId) => { toast('Willkommen im Board!', 'success'); navigate(`#/board/${boardId}`); };
+
+  if (info.accepted || info.expired) {
+    put(box, head, h('p', { class: 'form-error' }, info.accepted ? 'Diese Einladung wurde bereits angenommen.' : 'Diese Einladung ist abgelaufen. Bitte um einen neuen Link.'),
+      h('a', { class: 'btn', href: '#/' }, state.me ? 'Zu meinen Boards' : 'Zur Anmeldung'));
+    return;
+  }
+
+  if (state.me) {
+    put(box, head,
+      state.me.email.toLowerCase() !== info.email.toLowerCase()
+        ? h('p', { class: 'hint' }, `Die Einladung ging an ${info.email}. Du bist als ${state.me.email} angemeldet und trittst mit diesem Konto bei.`) : null,
+      h('button', {
+        class: 'btn btn-primary btn-block',
+        onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          try { done((await api.post(`/invitations/token/${encodeURIComponent(token)}/accept`)).boardId); } catch (err) { showError(err); e.target.disabled = false; }
+        },
+      }, 'Einladung annehmen'));
+    return;
+  }
+
+  let mode = info.accountExists ? 'login' : 'register';
+  const draw = () => {
+    clear(box);
+    const err = h('p', { class: 'form-error', role: 'alert' });
+    const name = h('input', { type: 'text', required: true, autocomplete: 'name', autofocus: true });
+    const email = h('input', { type: 'email', value: info.email, readOnly: mode === 'register', required: true, autocomplete: 'email' });
+    const pw = h('input', { type: 'password', required: true, minlength: mode === 'register' ? 10 : undefined, autocomplete: mode === 'register' ? 'new-password' : 'current-password' });
+    put(box, head, h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        try {
+          if (mode === 'register') {
+            const r = await api.post('/auth/register', { name: name.value, password: pw.value, inviteToken: token });
+            await loadMe();
+            renderNav();
+            done(r.boardId);
+          } else {
+            await api.post('/auth/login', { email: email.value, password: pw.value });
+            await loadMe();
+            renderNav();
+            done((await api.post(`/invitations/token/${encodeURIComponent(token)}/accept`)).boardId);
+          }
+        } catch (ex) { err.textContent = ex.message; }
+      },
+    },
+    h('h2', {}, mode === 'register' ? 'Konto anlegen und beitreten' : 'Anmelden und beitreten'),
+    mode === 'register' ? h('label', { class: 'field' }, h('span', {}, 'Dein Name'), name) : null,
+    h('label', { class: 'field' }, h('span', {}, 'E-Mail'), email),
+    h('label', { class: 'field' }, h('span', {}, mode === 'register' ? 'Passwort wählen (mind. 10 Zeichen)' : 'Passwort'), pw),
+    err,
+    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, mode === 'register' ? 'Konto anlegen & beitreten' : 'Anmelden & beitreten'),
+    h('p', { class: 'auth-switch' }, h('a', {
+      href: '#', onclick: (e) => { e.preventDefault(); mode = mode === 'register' ? 'login' : 'register'; draw(); },
+    }, mode === 'register' ? 'Ich habe schon ein Konto' : 'Ich habe noch kein Konto'))));
+  };
+  draw();
+}
+
 // ---------------- Board-Übersicht ----------------
 
 async function renderBoards() {
@@ -210,6 +290,13 @@ async function renderTasks() {
 async function route() {
   const hash = location.hash || '#/';
   renderNav();
+  const inv = hash.match(/^#\/invite\/([\w-]+)/);
+  if (inv) {
+    closeBoard();
+    clear(main);
+    await renderInvite(inv[1]);
+    return;
+  }
   if (!state.me) {
     closeBoard();
     clear(main);

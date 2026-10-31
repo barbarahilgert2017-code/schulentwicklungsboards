@@ -6,7 +6,7 @@ import { tx } from '../db.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function authRoutes({ db, config }) {
+export default function authRoutes({ db, config, mailer, invitations }) {
   const r = Router();
   const limiter = createRateLimiter({ max: 10 });
   const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
@@ -36,26 +36,33 @@ export default function authRoutes({ db, config }) {
         nextcloudFixed: config.nextcloud.allowedHosts.length === 1 && !!config.nextcloud.defaultUrl,
         nextcloudBaseFolder: config.nextcloud.baseFolder,
         uploadMaxMb: config.uploadMaxMb,
+        mailEnabled: mailer.enabled,
+        demo: config.demo,
       },
     });
   });
 
   r.post('/register', (req, res) => {
     const first = userCount() === 0;
-    if (!config.allowRegistration && !first) throw new HttpError(403, 'Die Registrierung ist deaktiviert. Bitte an die Administration wenden.');
-    const email = text(req.body.email, { name: 'E-Mail', required: true, max: 200 }).toLowerCase();
+    // Gültige Einladung erlaubt die Registrierung auch bei geschlossener Registrierung / fremder Domain.
+    const inv = req.body.inviteToken ? invitations.byToken(req.body.inviteToken) : null;
+    if (req.body.inviteToken && (!inv || inv.accepted_at || inv.expired)) throw bad('Die Einladung ist ungültig oder abgelaufen.');
+    if (!config.allowRegistration && !first && !inv) throw new HttpError(403, 'Die Registrierung ist deaktiviert. Bitte an die Administration wenden.');
+    const email = inv ? inv.email.toLowerCase() : text(req.body.email, { name: 'E-Mail', required: true, max: 200 }).toLowerCase();
     const name = text(req.body.name, { name: 'Name', required: true, max: 100 });
     const password = validPassword(req.body.password);
     if (!EMAIL_RE.test(email)) throw bad('Bitte eine gültige E-Mail-Adresse angeben.');
-    if (config.registrationDomains.length && !first) {
+    if (config.registrationDomains.length && !first && !inv) {
       const domain = email.split('@')[1];
       if (!config.registrationDomains.includes(domain)) throw bad(`Registrierung nur mit Adressen von: ${config.registrationDomains.join(', ')}`);
     }
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) throw new HttpError(409, 'Diese E-Mail-Adresse ist bereits registriert.');
     const { lastInsertRowid } = db.prepare('INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, ?)')
       .run(email, name, hashPassword(password), first ? 1 : 0);
-    const csrf = createSession(db, config, res, Number(lastInsertRowid));
-    res.status(201).json({ user: { id: Number(lastInsertRowid), email, name, isAdmin: first }, csrf });
+    const user = { id: Number(lastInsertRowid), email, name, isAdmin: first };
+    const boardId = inv ? invitations.accept(inv, user) : null;
+    const csrf = createSession(db, config, res, user.id);
+    res.status(201).json({ user, csrf, boardId });
   });
 
   r.post('/login', (req, res) => {

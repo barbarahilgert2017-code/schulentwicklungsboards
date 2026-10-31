@@ -15,6 +15,7 @@
     "cli": "node --disable-warning=ExperimentalWarning server/cli.js"
   },
   "dependencies": {
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "nodemailer": "^10.3.1"
   }
 }

@@ -8,7 +8,7 @@ import { entryJson } from '../nc-service.js';
 
 const ROLES = ['owner', 'editor', 'viewer'];
 
-export default function boardRoutes({ db, config, nc, svc, access }) {
+export default function boardRoutes({ db, config, nc, svc, access, invitations }) {
   const r = Router();
   r.use(requireUser);
 
@@ -113,17 +113,23 @@ export default function boardRoutes({ db, config, nc, svc, access }) {
 
   // ---------------- Mitglieder ----------------
 
-  r.post('/boards/:id/members', (req, res) => {
+  r.post('/boards/:id/members', async (req, res) => {
     const { boardId } = access.board(req.user, req.params.id, 'owner');
     const email = text(req.body.email, { name: 'E-Mail', required: true, max: 200 }).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad('Bitte eine gültige E-Mail-Adresse angeben.');
     const role = ROLES.includes(req.body.role) ? req.body.role : 'editor';
-    const u = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email);
-    if (!u) throw new HttpError(404, 'Unter dieser E-Mail ist noch niemand registriert. Bitte die Person bitten, sich zuerst zu registrieren.');
+    const u = db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(email);
+    if (!u) {
+      // Noch kein Konto → Einladung per E-Mail (Link wird zusätzlich zurückgegeben)
+      const inv = await invitations.invite(req, boardId, email, role);
+      return res.status(201).json({ status: 'invited', ...inv });
+    }
     const exists = db.prepare('SELECT 1 FROM board_members WHERE board_id = ? AND user_id = ?').get(boardId, u.id);
     if (exists) throw new HttpError(409, `${u.name} ist bereits Mitglied.`);
     db.prepare('INSERT INTO board_members (board_id, user_id, role) VALUES (?, ?, ?)').run(boardId, u.id, role);
     svc.log(boardId, null, req.user.id, 'member.added', { name: u.name, role });
-    res.status(201).json({ ok: true });
+    const mailed = await invitations.notifyAdded(req, boardId, u, role);
+    res.status(201).json({ status: 'added', name: u.name, mailed });
   });
 
   const ownerCount = (boardId) => db.prepare("SELECT COUNT(*) n FROM board_members WHERE board_id = ? AND role = 'owner'").get(boardId).n;

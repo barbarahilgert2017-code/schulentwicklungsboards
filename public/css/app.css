@@ -396,3 +396,9 @@ input[readonly] { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- Einladungen ---- */
+.invite-page { display: flex; justify-content: center; padding-top: 6vh; }
+.invite-box { width: 100%; max-width: 440px; }
+.invite-box h1 { margin-bottom: .25rem; }
+.pending-invites h3 { margin-top: 1.5rem; font-size: 1rem; }

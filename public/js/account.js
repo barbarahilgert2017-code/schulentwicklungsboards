@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { h, icon, toast, showError, confirmDialog } from './dom.js';
+import { h, put, clear, icon, toast, showError, confirmDialog } from './dom.js';
 import { state } from './state.js';
 
 let pollTimer = null;
@@ -92,15 +92,17 @@ function ncPanel(reload) {
     onsubmit: async (e) => {
       e.preventDefault();
       // Fenster sofort öffnen (sonst blockiert der Browser das Pop-up)
-      const win = window.open('', '_blank');
+      const win = state.config.demo ? null : window.open('', '_blank');
       btn.disabled = true;
       status.textContent = 'Verbindung wird vorbereitet …';
       try {
         const flow = await api.post('/nextcloud/login/start', { server: server.value });
         if (win) { win.opener = null; win.location.href = flow.loginUrl; }
-        status.replaceChildren(
-          h('p', {}, 'Bitte im neuen Fenster bei der Nextcloud anmelden und „Zugriff gewähren“ klicken.'),
-          h('p', {}, 'Kein Fenster geöffnet? ', h('a', { href: flow.loginUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Anmeldeseite öffnen')),
+        put(clear(status),
+          state.config.demo
+            ? h('p', {}, 'Klick-Dummy: Die Nextcloud-Anmeldung wird simuliert und in wenigen Sekunden „bestätigt“.')
+            : [h('p', {}, 'Bitte im neuen Fenster bei der Nextcloud anmelden und „Zugriff gewähren“ klicken.'),
+              h('p', {}, 'Kein Fenster geöffnet? ', h('a', { href: flow.loginUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Anmeldeseite öffnen'))],
           h('p', { class: 'muted spinner-line' }, h('span', { class: 'spinner' }), ' Warte auf Bestätigung …'));
         const started = Date.now();
         pollTimer = setInterval(async () => {

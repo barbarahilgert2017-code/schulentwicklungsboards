@@ -126,7 +126,6 @@ test('Rechte: Lesende, Fremde, letzte verantwortliche Person', async () => {
 
   assert.equal((await stranger.get(`/api/boards/${boardId}`)).status, 404);
   assert.equal((await stranger.get(`/api/cards/${card.id}`)).status, 404);
-  assert.equal((await owner.post(`/api/boards/${boardId}/members`, { email: 'unbekannt@schule.de' })).status, 404);
   assert.equal((await owner.post(`/api/boards/${boardId}/members`, { email: 'leser@schule.de', role: 'viewer' })).status, 201);
 
   assert.equal((await reader.get(`/api/boards/${boardId}`)).status, 200);

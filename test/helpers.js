@@ -2,7 +2,7 @@ import { loadConfig } from '../server/config.js';
 import { openDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 
-export async function startApp(overrides = {}) {
+export async function startApp(overrides = {}, { mailer } = {}) {
   const config = loadConfig({
     dbFile: ':memory:', dataDir: '/nonexistent', appSecret: 'x'.repeat(40), cookieSecure: false, production: false,
     allowRegistration: true, registrationDomains: [],
@@ -10,7 +10,7 @@ export async function startApp(overrides = {}) {
     nextcloud: { allowInsecureHttp: true, allowPrivateNetworks: true, allowedHosts: [], baseFolder: 'Schulentwicklung', ...(overrides.nextcloud || {}) },
   });
   const db = openDb(':memory:');
-  const app = createApp({ config, db });
+  const app = createApp({ config, db, ...(mailer ? { mailer } : {}) });
   const server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, db, config, close: () => new Promise((r) => server.close(r)) };

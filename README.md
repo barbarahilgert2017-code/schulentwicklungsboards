@@ -11,6 +11,7 @@ Ein schlankes, selbst gehostetes Kanban-Werkzeug (Trello-ähnlich) für **Schule
 - Filter nach Text, Label, „Mir zugewiesen“ und Fälligkeit; Archiv für Karten und Listen
 - **Meine Aufgaben**: alle mir zugewiesenen Karten und Checklistenpunkte über alle Boards, gruppiert nach Dringlichkeit
 - Rollen pro Board: *Verantwortlich*, *Bearbeiten*, *Lesen* (Lesende dürfen kommentieren – z. B. Schulleitung oder Kollegium)
+- **Einladungen per E-Mail**: Personen ohne Konto erhalten einen persönlichen, ablaufenden Link, mit dem sie sich registrieren und direkt dem Board beitreten – auch wenn die freie Registrierung geschlossen ist. Bestehende Konten werden direkt hinzugefügt und benachrichtigt. Ohne SMTP-Server lässt sich der Link kopieren und selbst weitergeben.
 - Aktivitätsprotokoll, JSON-Export pro Board, Konto-Selbstlöschung
 
 **Nextcloud**
@@ -79,6 +80,8 @@ Alle Einstellungen über Umgebungsvariablen, siehe [`.env.example`](.env.example
 | `NEXTCLOUD_ALLOWED_HOSTS` | Allowlist erlaubter Nextcloud-Server (empfohlen) |
 | `NEXTCLOUD_BASE_FOLDER` | Basisordner für Board-Ordner (Standard `Schulentwicklung`) |
 | `UPLOAD_MAX_MB` | maximale Uploadgröße |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Mailversand für Einladungen (optional) |
+| `INVITE_DAYS` | Gültigkeit von Einladungslinks (Standard 14 Tage) |
 
 ## Architektur
 
@@ -93,10 +96,11 @@ server/
   nextcloud.js      Login Flow v2, WebDAV (PROPFIND/MKCOL/PUT), OCS (Benutzer, Freigaben), SSRF-Schutz
   nc-service.js     gespeicherte Nextcloud-Konten ↔ Client, Board-Ordner
   templates.js      Schulentwicklungs-Vorlagen
+  invitations.js    Einladungen (Token, Annahme), mailer.js: SMTP-Versand + Mailtexte
   routes/           REST-API (auth, nextcloud, boards, cards)
 public/             Frontend ohne Build-Schritt (ES-Module, eigenes CSS, keine CDNs)
 test/               node:test + simulierte Nextcloud
 deploy/             Caddyfile, Backup-Skript
 ```
 
-Einzige Laufzeitabhängigkeit ist Express.
+Laufzeitabhängigkeiten: Express und nodemailer.

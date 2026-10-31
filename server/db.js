@@ -158,6 +158,22 @@ const MIGRATIONS = [
   CREATE INDEX activities_board ON activities(board_id, id DESC);
   CREATE INDEX activities_card ON activities(card_id, id DESC);
   `,
+  // 2: E-Mail-Einladungen
+  `
+  CREATE TABLE invitations (
+    id INTEGER PRIMARY KEY,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    email TEXT NOT NULL COLLATE NOCASE,
+    role TEXT NOT NULL CHECK (role IN ('owner','editor','viewer')),
+    token_hash TEXT NOT NULL UNIQUE,
+    invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    accepted_at TEXT,
+    accepted_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  );
+  CREATE INDEX invitations_board ON invitations(board_id);
+  `,
 ];
 
 export function openDb(file) {
