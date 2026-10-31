@@ -1,0 +1,16 @@
+{$DOMAIN} {
+	encode zstd gzip
+	# Uploads in die Nextcloud werden durchgestreamt – Limit passend zu UPLOAD_MAX_MB wählen
+	request_body {
+		max_size 100MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# Keine Zugriffsprotokolle mit IP-Adressen (Datensparsamkeit)
+	log {
+		output discard
+	}
+	reverse_proxy app:3000
+}

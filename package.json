@@ -1,0 +1,20 @@
+{
+  "name": "schulentwicklungsboards",
+  "version": "0.1.0",
+  "description": "Kanban-/Projektmanagement-Tool für Schulentwicklungsgruppen mit Nextcloud-Anbindung",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
+    "backup": "node --disable-warning=ExperimentalWarning server/backup.js",
+    "cli": "node --disable-warning=ExperimentalWarning server/cli.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
