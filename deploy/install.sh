@@ -48,6 +48,33 @@ public_ip() {
   printf '%s' "$ip"
 }
 
+CRON="${SEB_CRON:-/etc/cron.d/schulentwicklungsboards}"
+LOG=/var/log/schulentwicklungsboards-update.log
+
+install_seb_and_cron() {
+  say "Befehl „seb“ und Zeitpläne einrichten …"
+  # Erst daneben schreiben, dann austauschen: ein gerade laufendes „seb“ liest so ungestört weiter.
+  sed "s#__DIR__#$DIR#" "$DIR/deploy/seb" > "$BIN.neu"
+  chmod 755 "$BIN.neu"
+  mv -f "$BIN.neu" "$BIN"
+  cat > "$CRON" <<CRONTAB
+# Schulentwicklungsboards: tägliche Datensicherung und (falls eingeschaltet) nächtliches Update
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+15 2 * * * root $DIR/deploy/backup.sh >/dev/null 2>&1
+40 3 * * * root $BIN update --auto >> $LOG 2>&1
+CRONTAB
+  chmod 644 "$CRON"
+  # Automatische Updates sind standardmäßig an – außer jemand hat sie bewusst ausgeschaltet.
+  if [ ! -f "$DIR/.autoupdate" ] && [ ! -f "$DIR/.autoupdate-aus" ]; then touch "$DIR/.autoupdate"; fi
+}
+
+# Nur „seb“ und Zeitpläne auffrischen (wird von „seb update“ nach einem Update aufgerufen)
+if [ -n "${SEB_REFRESH_ONLY:-}" ]; then
+  install_seb_and_cron
+  exit 0
+fi
+
 # ---------------------------------------------------------------- Prüfungen
 [ -n "$DRY" ] || [ "$(id -u)" = 0 ] || die "Bitte mit Administratorrechten ausführen (… | sudo bash)."
 command -v apt-get >/dev/null || [ -n "$DRY" ] || die "Dieses Skript unterstützt Ubuntu und Debian."
@@ -172,56 +199,12 @@ ENV
   chmod 600 "$DIR/.env"
   umask 022
 else
-  DOMAIN=$(grep -E '^DOMAIN=' "$DIR/.env" | cut -d= -f2-)
+  DOMAIN=$(grep -E '^DOMAIN=' "$DIR/.env" | cut -d= -f2- || true)
   SETUP_CODE=$(grep -E '^SETUP_CODE=' "$DIR/.env" | cut -d= -f2- || true)
 fi
 
-# ---------------------------------------------------------------- Verwaltungsbefehl „seb“
-say "Befehl „seb“ einrichten …"
-cat > "$BIN" <<'SEB'
-#!/usr/bin/env bash
-# Verwaltung von Schulentwicklungsboards. Übersicht: sudo seb hilfe
-set -euo pipefail
-DIR="__DIR__"
-cd "$DIR"
-dc() { docker compose "$@"; }
-case "${1:-hilfe}" in
-  status)        dc ps; echo; echo "Adresse: $(grep -E '^BASE_URL=' .env | cut -d= -f2-)";;
-  update)        git fetch -q origin && git reset -q --hard "origin/$(git rev-parse --abbrev-ref HEAD)" && dc up -d --build && docker image prune -f >/dev/null && echo "Aktualisiert.";;
-  einstellungen) ${EDITOR:-nano} .env && dc up -d && echo "Neu gestartet mit den neuen Einstellungen.";;
-  neustart)      dc up -d --force-recreate && echo "Neu gestartet.";;
-  logs)          dc logs --tail 100 -f app;;
-  sicherung)     ./deploy/backup.sh && echo "Sicherungen: docker compose exec app ls /data/backups";;
-  code)          echo "Einrichtungscode: $(grep -E '^SETUP_CODE=' .env | cut -d= -f2-)  (nur für das allererste Konto)";;
-  passwort)      [ -n "${2:-}" ] || { echo "Aufruf: sudo seb passwort name@schule.de"; exit 1; }
-                 dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js reset-password "$2";;
-  admin)         [ -n "${2:-}" ] || { echo "Aufruf: sudo seb admin name@schule.de"; exit 1; }
-                 dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js make-admin "$2";;
-  konten)        dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js list-users;;
-  *) cat <<HILFE
-Schulentwicklungsboards – Verwaltung (immer mit sudo):
-  seb status          Läuft alles? Zeigt die Adresse.
-  seb update          Neueste Version holen und neu starten
-  seb einstellungen   Einstellungen (.env) bearbeiten, z. B. E-Mail-Versand, Nextcloud
-  seb neustart        App neu starten
-  seb logs            Protokoll ansehen (Strg+C beendet)
-  seb sicherung       Datensicherung jetzt erstellen (läuft auch täglich automatisch)
-  seb code            Einrichtungscode anzeigen
-  seb passwort MAIL   Neues Zufallspasswort für ein Konto setzen
-  seb admin MAIL      Konto zur Administration machen
-  seb konten          Alle Konten auflisten
-HILFE
-  ;;
-esac
-SEB
-sed -i "s#__DIR__#$DIR#" "$BIN"
-chmod 755 "$BIN"
-
-# ---------------------------------------------------------------- Tägliche Sicherung
-CRON="${SEB_CRON:-/etc/cron.d/schulentwicklungsboards}"
-echo "15 2 * * * root $DIR/deploy/backup.sh >/dev/null 2>&1" > "$CRON"
-chmod 644 "$CRON"
-
+# ---------------------------------------------------------------- Verwaltungsbefehl „seb“ und Zeitpläne
+install_seb_and_cron
 # ---------------------------------------------------------------- Starten
 say "App bauen und starten (beim ersten Mal 1–3 Minuten) …"
 if [ -n "$DRY" ]; then
@@ -252,7 +235,9 @@ So geht es weiter:
 
 Wichtig:
   • Einstellungen ändern:   sudo seb einstellungen
-  • Neue Version holen:     sudo seb update
+  • Updates:                kommen automatisch jede Nacht (mit Sicherung vorher und
+                            Rückkehr zur alten Version, falls etwas nicht startet).
+                            Ausschalten: sudo seb automatisch aus · Sofort: sudo seb update
   • Alle Befehle:           sudo seb hilfe
   • Datensicherung läuft täglich um 2:15 Uhr. Zusätzlich die Datei $DIR/.env
     an einem sicheren Ort aufbewahren (enthält den geheimen Schlüssel).

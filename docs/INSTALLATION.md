@@ -122,14 +122,18 @@ Alle Befehle auf dem Server, immer mit `sudo`:
 | Befehl | Wofür |
 |---|---|
 | `sudo seb status` | Läuft alles? |
-| `sudo seb update` | Neue Version installieren (Daten bleiben erhalten) |
+| `sudo seb update` | Neue Version sofort installieren (sonst passiert das jede Nacht automatisch) |
+| `sudo seb automatisch an` / `aus` | Nächtliche Updates ein- oder ausschalten (Standard: an) |
+| `sudo seb updateprotokoll` | Was haben die automatischen Updates gemacht? |
 | `sudo seb einstellungen` | E-Mail, Nextcloud, Registrierung, Adresse ändern |
 | `sudo seb sicherung` | Datensicherung sofort (läuft sonst täglich um 2:15 Uhr) |
 | `sudo seb logs` | Protokoll ansehen, wenn etwas nicht klappt |
 | `sudo seb passwort name@schule.de` | Notfall: neues Passwort setzen, falls niemand mehr in die Verwaltung kommt |
 | `sudo seb hilfe` | Alle Befehle |
 
-**Sicherheitsupdates** des Betriebssystems installiert der Server selbstständig. Die Firewall lässt nur SSH, HTTP und HTTPS zu.
+**Neue Versionen der App** holt der Server jede Nacht um 3:40 Uhr selbst. Vorher wird eine Datensicherung erstellt; startet die neue Version nicht, kehrt er automatisch zur vorherigen zurück. Ihr müsst euch dafür nicht anmelden.
+
+**Sicherheitsupdates** des Betriebssystems installiert der Server ebenfalls selbstständig. Die Firewall lässt nur SSH, HTTP und HTTPS zu.
 
 **Datensicherung:** Die tägliche Sicherung liegt auf dem Server selbst (30 Tage). Für den Fall, dass der ganze Server ausfällt, zusätzlich bei Hetzner die **Backups** für den Server einschalten (ca. 20 % Aufpreis) und die Datei `/opt/schulentwicklungsboards/.env` an einem sicheren Ort aufbewahren – sie enthält den geheimen Schlüssel.
 

@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Verwaltung von Schulentwicklungsboards. Übersicht: sudo seb hilfe
+# Wird von deploy/install.sh nach /usr/local/bin/seb kopiert (__DIR__ = Installationsordner).
+set -euo pipefail
+DIR="${SEB_DIR:-__DIR__}"
+cd "$DIR"
+AUTO_FLAG="$DIR/.autoupdate"
+dc() { docker compose "$@"; }
+stamp() { date '+%Y-%m-%d %H:%M'; }
+
+healthy() { # wartet bis zu ~90 s, bis die App antwortet
+  local _
+  for _ in $(seq 1 "${SEB_HEALTH_TRIES:-30}"); do
+    if dc exec -T app node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "${SEB_HEALTH_WAIT:-3}"
+  done
+  return 1
+}
+
+update() { # update [--auto]
+  local auto="${1:-}" branch old new
+  if [ "$auto" = "--auto" ] && [ ! -f "$AUTO_FLAG" ]; then exit 0; fi
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  old=$(git rev-parse HEAD)
+  git fetch -q origin "$branch"
+  new=$(git rev-parse "origin/$branch")
+  if [ "$old" = "$new" ]; then
+    [ "$auto" = "--auto" ] || echo "Bereits auf dem neuesten Stand ($(git log -1 --format='%h %s'))."
+    return 0
+  fi
+  echo "[$(stamp)] Update von ${old:0:7} auf ${new:0:7} …"
+  ./deploy/backup.sh >/dev/null 2>&1 || echo "Hinweis: Datensicherung vor dem Update fehlgeschlagen."
+  git reset -q --hard "$new"
+  if dc up -d --build --quiet-pull >/dev/null 2>&1 && healthy; then
+    docker image prune -f >/dev/null 2>&1 || true
+    # Verwaltungsbefehl und Zeitpläne aus der neuen Version übernehmen
+    SEB_REFRESH_ONLY=1 SEB_NONINTERACTIVE=1 SEB_DIR="$DIR" bash ./deploy/install.sh >/dev/null 2>&1 || true
+    echo "[$(stamp)] Aktualisiert: $(git log -1 --format='%h %s')"
+  else
+    echo "[$(stamp)] Die neue Version startet nicht – zurück auf die vorherige (${old:0:7})."
+    git reset -q --hard "$old"
+    dc up -d --build >/dev/null 2>&1 || true
+    if healthy; then echo "[$(stamp)] Vorherige Version läuft wieder."; else echo "[$(stamp)] ACHTUNG: App antwortet nicht. Bitte: sudo seb logs"; fi
+    return 1
+  fi
+}
+
+case "${1:-hilfe}" in
+  status)
+    dc ps
+    echo
+    echo "Adresse:     $(grep -E '^BASE_URL=' .env | cut -d= -f2-)"
+    echo "Version:     $(git log -1 --format='%h vom %cd – %s' --date=format:'%d.%m.%Y')"
+    if [ -f "$AUTO_FLAG" ]; then echo "Updates:     automatisch jede Nacht (ausschalten: sudo seb automatisch aus)"; else echo "Updates:     nur von Hand (einschalten: sudo seb automatisch an)"; fi
+    ;;
+  update)        update "${2:-}";;
+  automatisch)
+    case "${2:-}" in
+      an)  touch "$AUTO_FLAG"; rm -f "$DIR/.autoupdate-aus"; echo "Automatische Updates sind an (jede Nacht um 3:40 Uhr).";;
+      aus) rm -f "$AUTO_FLAG"; touch "$DIR/.autoupdate-aus"; echo "Automatische Updates sind aus. Von Hand: sudo seb update";;
+      *)   if [ -f "$AUTO_FLAG" ]; then echo "Automatische Updates: an"; else echo "Automatische Updates: aus"; fi
+           echo "Ändern: sudo seb automatisch an | aus";;
+    esac
+    ;;
+  updateprotokoll) tail -n 30 /var/log/schulentwicklungsboards-update.log 2>/dev/null || echo "Noch keine automatischen Updates.";;
+  einstellungen) ${EDITOR:-nano} .env && dc up -d && echo "Neu gestartet mit den neuen Einstellungen.";;
+  neustart)      dc up -d --force-recreate && echo "Neu gestartet.";;
+  logs)          dc logs --tail 100 -f app;;
+  sicherung)     ./deploy/backup.sh && echo "Sicherung erstellt. Liste: docker compose exec app ls /data/backups";;
+  code)          echo "Einrichtungscode: $(grep -E '^SETUP_CODE=' .env | cut -d= -f2-)  (nur für das allererste Konto)";;
+  passwort)      [ -n "${2:-}" ] || { echo "Aufruf: sudo seb passwort name@schule.de"; exit 1; }
+                 dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js reset-password "$2";;
+  admin)         [ -n "${2:-}" ] || { echo "Aufruf: sudo seb admin name@schule.de"; exit 1; }
+                 dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js make-admin "$2";;
+  konten)        dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js list-users;;
+  *) cat <<HILFE
+Schulentwicklungsboards – Verwaltung (immer mit sudo):
+  seb status              Läuft alles? Adresse, Version, Update-Einstellung
+  seb update              Neueste Version jetzt holen (mit Sicherung und Rückfall)
+  seb automatisch an|aus  Nächtliche Updates ein- oder ausschalten
+  seb updateprotokoll     Was haben die automatischen Updates gemacht?
+  seb einstellungen       Einstellungen (.env) bearbeiten, z. B. E-Mail-Versand, Nextcloud
+  seb neustart            App neu starten
+  seb logs                Protokoll ansehen (Strg+C beendet)
+  seb sicherung           Datensicherung jetzt erstellen (läuft auch täglich automatisch)
+  seb code                Einrichtungscode anzeigen
+  seb passwort MAIL       Neues Zufallspasswort für ein Konto setzen
+  seb admin MAIL          Konto zur Administration machen
+  seb konten              Alle Konten auflisten
+HILFE
+  ;;
+esac

@@ -5,3 +5,5 @@ data/
 .env
 backups/
 dist/
+.autoupdate
+.autoupdate-aus
