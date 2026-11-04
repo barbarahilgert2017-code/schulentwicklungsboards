@@ -8,7 +8,8 @@
 # Erneut ausführen ist gefahrlos: vorhandene Daten und Einstellungen bleiben erhalten.
 #
 # Ohne Rückfragen (z. B. per cloud-init):  SEB_NONINTERACTIVE=1 SEB_DOMAIN=boards.schule.de bash install.sh
-# Weitere Variablen: SEB_NEXTCLOUD (Adresse der Schul-Nextcloud), SEB_MAIL_DOMAINS (z. B. schule.de)
+# Weitere Variablen: SEB_NEXTCLOUD (Adresse der Schul-Nextcloud), SEB_MAIL_DOMAINS (z. B. schule.de),
+#   SEB_SETUP_CODE (eigener Einrichtungscode, mind. 8 Zeichen – sonst wird einer erzeugt)
 set -euo pipefail
 
 REPO_URL="${SEB_REPO:-https://github.com/barbarahilgert2017-code/schulentwicklungsboards.git}"
@@ -92,15 +93,17 @@ fi
 # ---------------------------------------------------------------- System vorbereiten
 say "Pakete und Sicherheitsupdates einrichten …"
 export DEBIAN_FRONTEND=noninteractive
-run apt-get update -qq
-run apt-get install -y -qq ca-certificates curl git openssl ufw unattended-upgrades >/dev/null
+# Beim ersten Start installiert der Server oft selbst Updates – dann warten statt abbrechen.
+APT=(apt-get -o DPkg::Lock::Timeout=600)
+run "${APT[@]}" update -qq
+run "${APT[@]}" install -y -qq ca-certificates curl git openssl ufw unattended-upgrades >/dev/null
 run dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null 2>&1 || true
 
 if [ -n "$DRY" ] || docker compose version >/dev/null 2>&1; then
   say "Docker ist vorhanden."
 else
   say "Docker installieren …"
-  if ! { apt-get install -y -qq docker.io docker-compose-v2 >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }; then
+  if ! { "${APT[@]}" install -y -qq docker.io docker-compose-v2 >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }; then
     curl -fsSL https://get.docker.com | sh >/dev/null
   fi
   systemctl enable --now docker >/dev/null 2>&1 || true
@@ -128,7 +131,9 @@ fi
 # ---------------------------------------------------------------- Konfiguration
 if [ -n "$FIRST" ]; then
   say "Konfiguration anlegen …"
-  SETUP_CODE=$(random_code)
+  SETUP_CODE="${SEB_SETUP_CODE:-}"
+  if [ -n "$SETUP_CODE" ] && [ "${#SETUP_CODE}" -lt 8 ]; then die "SEB_SETUP_CODE ist zu kurz (mind. 8 Zeichen)."; fi
+  [ -n "$SETUP_CODE" ] || SETUP_CODE=$(random_code)
   umask 077
   cat > "$DIR/.env" <<ENV
 # Schulentwicklungsboards – Einstellungen. Nach Änderungen: sudo seb neustart
