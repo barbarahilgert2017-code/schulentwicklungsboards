@@ -6,6 +6,7 @@ import {
 import { state, navigate, describeActivity } from './state.js';
 import { board, canEdit, refresh as refreshBoard } from './board.js';
 import { openFilePicker } from './filepicker.js';
+import { openBoardSettings } from './settings.js';
 import { renderMarkdown, renderInline, markdownToolbar, markdownShortcuts } from './markdown.js';
 
 let modal = null;
@@ -260,9 +261,9 @@ function attachmentsBlock(edit) {
         onPick: async (entry, source) => { await api.post(`/cards/${card.id}/attachments/nextcloud`, { path: entry.path, source }); await reload(); },
       }) }, icon('cloud'), ' Aus Nextcloud'),
       h('button', {
-        class: 'btn btn-sm', disabled: !b.folder,
-        title: b.folder ? `Lädt in ${b.folder.path}` : 'Zuerst einen Board-Ordner verknüpfen (Board-Menü → Nextcloud-Ordner)',
-        onclick: () => fileInput.click(),
+        class: 'btn btn-sm',
+        title: b.folder ? `Lädt in ${b.folder.path}` : 'Dieses Board hat noch keinen Nextcloud-Ordner',
+        onclick: () => (b.folder ? fileInput.click() : explainNoFolder()),
       }, icon('upload'), ' Hochladen'),
       h('button', { class: 'btn btn-sm', onclick: addLink }, icon('link'), ' Link'),
       fileInput);
@@ -276,6 +277,33 @@ function attachmentsBlock(edit) {
     }
   }
   return sec;
+}
+
+/** Hochladen ohne Board-Ordner: erklären und (für Verantwortliche) direkt zur Einrichtung führen. */
+function explainNoFolder() {
+  const data = board();
+  const owner = data.board.role === 'owner';
+  const m = openModal({
+    title: 'Noch kein Board-Ordner',
+    content: [
+      h('p', {}, 'Hochgeladene Dateien werden im Nextcloud-Ordner des Boards gespeichert. Dieses Board hat noch keinen.'),
+      owner
+        ? h('p', { class: 'muted' }, state.nextcloud
+          ? 'Du kannst jetzt einen Ordner anlegen oder einen vorhandenen auswählen. Danach geht das Hochladen sofort.'
+          : 'Dafür verbindest du zuerst unter „Konto“ deine Nextcloud und legst dann hier den Ordner an.')
+        : h('p', { class: 'muted' }, 'Bitte die verantwortliche Person des Boards, einen Nextcloud-Ordner zu verknüpfen (Board → „Ordner verknüpfen“).'),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn', onclick: () => m.close() }, owner ? 'Später' : 'OK'),
+        owner && !state.nextcloud ? h('a', { class: 'btn btn-primary', href: '#/account', onclick: () => m.close() }, 'Zu „Konto“') : null,
+        owner && state.nextcloud ? h('button', {
+          class: 'btn btn-primary', autofocus: true,
+          onclick: () => {
+            m.close();
+            openBoardSettings(data, 'folder', async () => { await refreshBoard(); if (modal) draw(); });
+          },
+        }, 'Ordner jetzt verknüpfen') : null),
+    ],
+  });
 }
 
 async function uploadFiles(files) {
