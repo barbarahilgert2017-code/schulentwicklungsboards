@@ -491,3 +491,30 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 .share-item-head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .share-item .inline-form { margin-top: .5rem; }
 .share-item input { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .82rem; }
+
+/* ---- QR-Code ---- */
+.qr-view { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.5rem; align-items: center; }
+.qr-box { background: #ffffff; border-radius: 12px; padding: .5rem; }
+.qr-svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+.qr-board { font-size: 1.6rem; font-weight: 700; margin: 0 0 .75rem; overflow-wrap: anywhere; }
+.qr-steps { font-size: 1.15rem; padding-left: 1.4rem; margin: 0 0 1rem; display: flex; flex-direction: column; gap: .35rem; }
+.qr-link { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; margin: 0; }
+.qr-actions { justify-content: flex-start; }
+.qr-modal:fullscreen { max-width: none; max-height: none; width: 100vw; height: 100vh; border-radius: 0; justify-content: center; }
+.qr-modal:fullscreen .modal-body { display: flex; flex-direction: column; justify-content: center; padding: 3vh 5vw; }
+.qr-modal:fullscreen .qr-svg { max-height: 82vh; }
+.qr-modal:fullscreen .qr-board { font-size: 3rem; }
+.qr-modal:fullscreen .qr-steps { font-size: 2rem; }
+.qr-modal:fullscreen .qr-actions, .qr-modal:fullscreen .modal-head { display: none; }
+@media (max-width: 760px) { .qr-view { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- Vorlagenkarten & Uhrzeiten ---- */
+.card-tile.card-template { border: 1px dashed color-mix(in srgb, var(--board-color) 70%, var(--border)); background: color-mix(in srgb, var(--board-color) 6%, var(--surface)); }
+.template-badge { display: inline-flex; align-items: center; gap: .2rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .2rem; }
+.template-banner { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; justify-content: space-between; padding: .6rem .8rem; margin-bottom: .75rem; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-2); }
+.composer-row { display: flex; gap: .25rem; align-items: center; }
+.composer-row .composer-open { flex: 1; }
+.composer-template { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .85rem; padding: .45rem .5rem; border-radius: 6px; cursor: pointer; white-space: nowrap; margin-top: .25rem; display: inline-flex; gap: .25rem; align-items: center; }
+.composer-template:hover { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.date-time { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(5.6rem, 1fr); gap: .3rem; }
+.date-time input { min-width: 0; padding-left: .4rem; padding-right: .3rem; }

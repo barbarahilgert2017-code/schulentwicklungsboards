@@ -431,12 +431,12 @@ function newBoardDialog(templates) {
 async function renderTasks() {
   const { cards, items } = await api.get('/my/tasks');
   const all = [
-    ...cards.map((c) => ({ kind: 'card', title: c.title, due: c.dueDate, boardId: c.boardId, boardTitle: c.boardTitle, color: c.boardColor, cardId: c.id, sub: c.listTitle })),
+    ...cards.map((c) => ({ kind: 'card', title: c.title, due: c.dueDate, time: c.dueTime, boardId: c.boardId, boardTitle: c.boardTitle, color: c.boardColor, cardId: c.id, sub: c.listTitle })),
     ...items.map((i) => ({ kind: 'item', title: i.text, due: i.dueDate, boardId: i.boardId, boardTitle: i.boardTitle, color: i.boardColor, cardId: i.cardId, sub: `Checkliste in „${i.cardTitle}“` })),
   ];
   const groups = { overdue: [], soon: [], later: [], none: [] };
   for (const t of all) {
-    const s = dueState(t.due, false);
+    const s = dueState(t.due, false, t.time);
     (s === 'overdue' ? groups.overdue : s === 'soon' ? groups.soon : s === 'ok' ? groups.later : groups.none).push(t);
   }
   const sortDue = (a, b) => (a.due || '').localeCompare(b.due || '');
@@ -447,7 +447,7 @@ async function renderTasks() {
         icon(t.kind === 'card' ? 'card' : 'checklist'),
         h('span', { class: 'task-title' }, renderInline(t.title, { links: false })),
         h('span', { class: 'task-meta' }, `${t.boardTitle} · ${t.sub}`),
-        t.due ? h('span', { class: `due due-${dueState(t.due, false)}` }, fmtDate(t.due)) : null))))) : null);
+        t.due ? h('span', { class: `due due-${dueState(t.due, false, t.time)}` }, fmtDate(t.due), t.time ? `, ${t.time}` : '') : null))))) : null);
 
   put(main,
     h('div', { class: 'page-head' }, h('h1', {}, 'Meine Aufgaben')),

@@ -30,6 +30,14 @@ export function date(value, name = 'Datum') {
   return value;
 }
 
+/** Uhrzeit als HH:MM oder null. */
+export function time(value, name = 'Uhrzeit') {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw bad(`${name} ist ungültig (erwartet HH:MM).`);
+  return value;
+}
+
 export function color(value) {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) throw bad('Farbe ist ungültig.');

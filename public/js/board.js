@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import {
   h, clear, icon, toast, showError, openModal, confirmDialog, popupMenu, inlineEdit,
-  fmtDateShort, fmtDateTime, dueState, avatar,
+  fmtDateShort, fmtDateTime, dueState, avatar, fmtWhen, fmtWhenShort,
 } from './dom.js';
 import { state, navigate, describeActivity } from './state.js';
 import { openCard, closeCardModal } from './card.js';
@@ -179,7 +179,8 @@ function matches(c) {
   if (f.mine && !c.members.includes(state.me.id)) return false;
   if (f.labels.size && !c.labels.some((l) => f.labels.has(l))) return false;
   if (f.due) {
-    const s = dueState(c.dueDate, c.completed);
+    if (c.isTemplate) return false;
+    const s = dueState(c.dueDate, c.completed, c.dueTime);
     if (f.due === 'none' ? !!c.dueDate : s !== f.due) return false;
   }
   return true;
@@ -253,17 +254,19 @@ async function moveList(id, index) {
 
 function cardTile(c) {
   const { labels, members } = cur.data;
-  const due = dueState(c.dueDate, c.completed);
+  const due = c.isTemplate ? 'ok' : dueState(c.dueDate, c.completed, c.dueTime);
   const cl = c.checklist;
   const tile = h('a', {
-    class: `card-tile ${c.completed ? 'completed' : ''}`, href: `#/board/${cur.boardId}/card/${c.id}`,
+    class: `card-tile ${c.completed ? 'completed' : ''} ${c.isTemplate ? 'card-template' : ''}`, href: `#/board/${cur.boardId}/card/${c.id}`,
     draggable: canEdit() ? 'true' : undefined, dataset: { id: c.id },
   },
   c.labels.length ? h('div', { class: 'card-labels' }, c.labels.map((id) => labels.find((l) => l.id === id)).filter(Boolean)
     .map((l) => h('span', { class: 'card-label', style: { '--label-color': l.color }, title: l.name }, l.name))) : null,
+  c.isTemplate ? h('div', { class: 'template-badge' }, icon('card', 12), ' Vorlage') : null,
   h('div', { class: 'card-title' }, c.completed ? h('span', { class: 'done-mark', title: 'Erledigt' }, icon('check', 14)) : null, renderInline(c.title, { links: false })),
   h('div', { class: 'card-badges' },
-    c.dueDate ? h('span', { class: `badge due due-${due}`, title: `Fällig am ${c.dueDate}` }, icon('clock', 13), ` ${fmtDateShort(c.dueDate)}`) : null,
+    c.dueDate ? h('span', { class: `badge due due-${due}`, title: `Fällig: ${fmtWhen(c.dueDate, c.dueTime)}` }, icon('clock', 13), ` ${fmtWhenShort(c.dueDate, c.dueTime)}`) : null,
+    !c.dueDate && c.dueTime && c.isTemplate ? h('span', { class: 'badge', title: 'Uhrzeit der Vorlage' }, icon('clock', 13), ` ${c.dueTime}`) : null,
     c.hasDescription ? h('span', { class: 'badge-plain', title: 'Hat Beschreibung' }, icon('text', 13)) : null,
     cl.total ? h('span', { class: `badge-plain ${cl.done === cl.total ? 'all-done' : ''}`, title: 'Checklisten' }, icon('checklist', 13), ` ${cl.done}/${cl.total}`) : null,
     c.comments ? h('span', { class: 'badge-plain', title: 'Kommentare' }, icon('comment', 13), ` ${c.comments}`) : null,
@@ -285,7 +288,23 @@ function cardTile(c) {
 function cardComposer(list) {
   const wrap = h('div', { class: 'list-composer' });
   const openBtn = h('button', { class: 'composer-open', onclick: () => open() }, icon('plus'), ' Karte hinzufügen');
-  wrap.append(openBtn);
+  const templates = cur.data.cards.filter((c) => c.isTemplate);
+  const tplBtn = templates.length ? h('button', {
+    class: 'composer-template', title: 'Neue Karte aus einer Vorlagenkarte',
+    onclick: (e) => popupMenu(e.currentTarget, templates.map((t) => ({
+      label: t.title, icon: 'card',
+      onClick: async () => {
+        try {
+          const made = await api.post(`/cards/${t.id}/copy`, { listId: list.id, title: t.title.replace(/^Vorlage:\s*/i, '') });
+          toast('Karte aus Vorlage erstellt.', 'success');
+          await refresh();
+          navigate(`#/board/${cur.boardId}/card/${made.id}`);
+        } catch (err) { showError(err); }
+      },
+    }))),
+  }, icon('card', 14), ' aus Vorlage') : null;
+  const row = h('div', { class: 'composer-row' }, openBtn, tplBtn);
+  wrap.append(row);
   function open() {
     const ta = h('textarea', { rows: 2, maxlength: 300, placeholder: 'Titel der Karte … (Enter zum Speichern)', 'aria-label': 'Titel der neuen Karte' });
     ta.dataset.escapeCancels = '1';
@@ -304,7 +323,7 @@ function cardComposer(list) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
       if (e.key === 'Escape') { e.preventDefault(); close(); }
     });
-    const close = () => clear(wrap).append(openBtn);
+    const close = () => clear(wrap).append(row);
     clear(wrap).append(ta, h('div', { class: 'composer-actions' },
       h('button', { class: 'btn btn-primary btn-sm', onclick: save }, 'Hinzufügen'),
       h('button', { class: 'icon-btn', 'aria-label': 'Abbrechen', onclick: close }, icon('x'))));

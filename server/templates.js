@@ -101,7 +101,15 @@ export const TEMPLATES = [
       ] },
       { title: 'Nächste Sitzung', cards: [
         {
-          title: 'Sitzung vorbereiten', dueInDays: 14, labels: ['Steuergruppe'],
+          title: 'Vorlage: Sitzung', template: true, labels: ['Steuergruppe'], dueTime: '14:00',
+          description: '**Termin:** Datum und Uhrzeit rechts eintragen\n**Ort:** \n**Moderation:** \n**Protokoll:** ',
+          checklists: [
+            { title: 'Vorbereitung', items: ['Tagesordnung abstimmen und versenden', 'Unterlagen im Board-Ordner bereitstellen', 'Moderation und Protokoll festlegen', 'Raum buchen'] },
+            { title: 'Nachbereitung', items: ['Protokoll im Board-Ordner ablegen', 'Vereinbarte Aufgaben als Karten anlegen', 'Ergebnisse ans Kollegium weitergeben'] },
+          ],
+        },
+        {
+          title: 'Sitzung vorbereiten', dueInDays: 14, dueTime: '14:00', labels: ['Steuergruppe'],
           checklists: [{ title: 'Vorbereitung', items: ['Tagesordnung abstimmen und versenden', 'Unterlagen im Board-Ordner bereitstellen', 'Moderation und Protokoll festlegen', 'Raum buchen'] }],
         },
       ] },
@@ -217,7 +225,13 @@ export const TEMPLATES = [
         },
         { title: 'Tandems bilden', labels: ['Fachschaft'], dueInDays: 30 },
       ] },
-      { title: 'Hospitationen geplant', cards: [] },
+      { title: 'Hospitationen geplant', cards: [
+        {
+          title: 'Vorlage: Hospitation', template: true, labels: ['Fachschaft'],
+          description: '**Tandem:** \n**Klasse / Fach:** \n**Beobachtungsschwerpunkt:** ',
+          checklists: [{ title: 'Ablauf', items: ['Vorgespräch: Schwerpunkt vereinbaren', 'Hospitation mit Beobachtungsbogen', 'Feedbackgespräch innerhalb einer Woche', 'Eigene Notizen zur Reflexion'] }],
+        },
+      ] },
       { title: 'Durchgeführt', cards: [] },
       { title: 'Feedback & Reflexion', cards: [
         { title: 'Gemeinsame Reflexionsrunde', labels: ['Fortbildung'], dueInDays: 120, description: 'Erfahrungen bündeln, ohne Einzelergebnisse offenzulegen.' },

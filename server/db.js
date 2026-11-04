@@ -203,6 +203,12 @@ const MIGRATIONS = [
   CREATE INDEX share_links_board ON share_links(board_id);
   ALTER TABLE board_members ADD COLUMN via_link_id INTEGER REFERENCES share_links(id) ON DELETE SET NULL;
   `,
+  // 5: Uhrzeiten für Termine, Vorlagenkarten
+  `
+  ALTER TABLE cards ADD COLUMN start_time TEXT;
+  ALTER TABLE cards ADD COLUMN due_time TEXT;
+  ALTER TABLE cards ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function openDb(file) {

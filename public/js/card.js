@@ -1,7 +1,7 @@
 import { api } from './api.js';
 import {
   h, clear, icon, toast, showError, openModal, confirmDialog, promptDialog, popupMenu, inlineEdit,
-  fmtDate, fmtDateTime, fmtSize, dueState, avatar,
+  fmtDate, fmtDateTime, fmtSize, dueState, avatar, fmtWhen,
 } from './dom.js';
 import { state, navigate, describeActivity } from './state.js';
 import { board, canEdit, refresh as refreshBoard } from './board.js';
@@ -59,7 +59,7 @@ function draw() {
   const edit = canEdit();
   modal.setTitle(board().board.title);
   clear(modal.body).append(h('div', { class: 'card-detail' },
-    h('div', { class: 'card-main' }, titleBlock(edit), metaRow(), descriptionBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
+    h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
     h('aside', { class: 'card-side' }, sidebar(edit))));
   modal.body.scrollTop = scroll;
 }
@@ -76,9 +76,45 @@ function titleBlock(edit) {
     card.creator ? ` · angelegt von ${card.creator} am ${fmtDateTime(card.createdAt)}` : ''));
 }
 
+/** Hinweis bei Vorlagenkarten + direkt eine Karte daraus erstellen. */
+function templateBanner(edit) {
+  if (!card.isTemplate) return null;
+  return h('div', { class: 'template-banner' },
+    h('div', {}, h('strong', {}, 'Vorlagenkarte'), h('span', { class: 'muted small' }, ' – daraus entstehen neue Karten mit Beschreibung, Labels, Uhrzeit und Checklisten (alle Punkte offen).')),
+    edit ? h('button', { class: 'btn btn-primary btn-sm', onclick: () => copyDialog(true) }, icon('plus'), ' Karte daraus erstellen') : null);
+}
+
+/** Karte kopieren bzw. aus Vorlage erstellen: Titel und Ziel-Liste wählen. */
+function copyDialog(fromTemplate) {
+  const { lists } = board();
+  const title = h('input', { type: 'text', maxlength: 300, required: true, autofocus: true, value: fromTemplate ? card.title.replace(/^Vorlage:\s*/i, '') : `${card.title} (Kopie)` });
+  const listSel = h('select', { 'aria-label': 'Liste' }, lists.map((l) => h('option', { value: l.id, selected: l.id === card.listId }, l.title)));
+  const m = openModal({
+    title: fromTemplate ? 'Karte aus Vorlage erstellen' : 'Karte kopieren',
+    content: h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        try {
+          const made = await api.post(`/cards/${card.id}/copy`, { title: title.value, listId: Number(listSel.value) });
+          m.close();
+          toast(fromTemplate ? 'Karte aus Vorlage erstellt.' : 'Karte kopiert.', 'success');
+          await refreshBoard();
+          navigate(`#/board/${card.boardId}/card/${made.id}`);
+        } catch (err) { showError(err); }
+      },
+    },
+    h('label', { class: 'field' }, h('span', {}, 'Titel'), title),
+    h('label', { class: 'field' }, h('span', {}, 'In Liste'), listSel),
+    h('p', { class: 'hint' }, 'Übernommen werden Beschreibung, Labels, Uhrzeit und Checklisten (alle Punkte offen) – keine Termine, Personen, Kommentare oder Anhänge.'),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn', onclick: () => m.close() }, 'Abbrechen'),
+      h('button', { type: 'submit', class: 'btn btn-primary' }, fromTemplate ? 'Erstellen' : 'Kopieren'))),
+  });
+}
+
 function metaRow() {
   const { labels, members } = board();
-  const due = dueState(card.dueDate, card.completed);
+  const due = card.isTemplate ? 'ok' : dueState(card.dueDate, card.completed, card.dueTime);
   const items = [];
   if (card.members.length) {
     items.push(h('div', { class: 'meta' }, h('div', { class: 'meta-label' }, 'Zuständig'),
@@ -93,8 +129,8 @@ function metaRow() {
   if (card.startDate || card.dueDate) {
     items.push(h('div', { class: 'meta' }, h('div', { class: 'meta-label' }, 'Zeitraum'),
       h('div', { class: 'meta-value' },
-        card.startDate ? `${fmtDate(card.startDate)} – ` : '',
-        card.dueDate ? h('span', { class: `badge due due-${due}` }, fmtDate(card.dueDate),
+        card.startDate ? `${fmtWhen(card.startDate, card.startTime)} – ` : '',
+        card.dueDate ? h('span', { class: `badge due due-${due}` }, fmtWhen(card.dueDate, card.dueTime),
           due === 'overdue' ? ' · überfällig' : due === 'soon' ? ' · bald fällig' : due === 'done' ? ' · erledigt' : '') : '')));
   }
   return items.length ? h('div', { class: 'meta-row' }, items) : null;
@@ -395,6 +431,14 @@ function sidebar(edit) {
   // Termine
   const start = h('input', { type: 'date', value: card.startDate || '', 'aria-label': 'Startdatum', onchange: act((e) => api.patch(`/cards/${card.id}`, { startDate: e.target.value || null })) });
   const due = h('input', { type: 'date', value: card.dueDate || '', 'aria-label': 'Fälligkeitsdatum', onchange: act((e) => api.patch(`/cards/${card.id}`, { dueDate: e.target.value || null })) });
+  // Uhrzeit optional; bei Vorlagen auch ohne Datum (wird beim Erstellen übernommen)
+  const timeInput = (field, value, dateValue, label) => h('input', {
+    type: 'time', value: value || '', 'aria-label': label, step: 300,
+    disabled: !dateValue && !card.isTemplate, title: !dateValue && !card.isTemplate ? 'Zuerst ein Datum wählen' : '',
+    onchange: act((e) => api.patch(`/cards/${card.id}`, { [field]: e.target.value || null })),
+  });
+  const startTime = timeInput('startTime', card.startTime, card.startDate, 'Startzeit');
+  const dueTime = timeInput('dueTime', card.dueTime, card.dueDate, 'Uhrzeit (Fälligkeit)');
 
   // Verschieben (auch als Alternative zu Drag & Drop, z. B. auf Tablets)
   const listSel = h('select', { 'aria-label': 'Ziel-Liste' }, lists.map((l) => h('option', { value: l.id, selected: l.id === card.listId }, l.title)));
@@ -412,7 +456,10 @@ function sidebar(edit) {
     doneBtn,
     section('Zuständig', memberList),
     section('Labels', labelList),
-    section('Termine', h('label', { class: 'field small' }, h('span', {}, 'Start'), start), h('label', { class: 'field small' }, h('span', {}, 'Fällig'), due)),
+    section('Termine',
+      h('div', { class: 'field small' }, h('span', {}, 'Start'), h('div', { class: 'date-time' }, start, startTime)),
+      h('div', { class: 'field small' }, h('span', {}, 'Fällig / Termin'), h('div', { class: 'date-time' }, due, dueTime)),
+      h('p', { class: 'hint' }, 'Uhrzeit optional, z. B. für Sitzungen.')),
     section('Checkliste', h('button', { class: 'btn btn-sm btn-block', onclick: async () => {
       const title = await promptDialog('Neue Checkliste', { label: 'Titel', value: 'Checkliste', ok: 'Hinzufügen' });
       if (title) act(() => api.post(`/cards/${card.id}/checklists`, { title }))();
@@ -423,6 +470,14 @@ function sidebar(edit) {
       toast('Karte verschoben.');
     }) }, icon('move'), ' Verschieben')),
     section('Aktionen',
+      h('button', { class: 'btn btn-sm btn-block', onclick: () => copyDialog(false) }, icon('card'), ' Kopieren'),
+      h('button', {
+        class: 'btn btn-sm btn-block', title: 'Vorlagenkarten zählen nicht als Aufgaben und lassen sich als Ausgangspunkt für neue Karten nutzen.',
+        onclick: act(async () => {
+          await api.patch(`/cards/${card.id}`, card.isTemplate ? { isTemplate: false } : { isTemplate: true, dueDate: null, startDate: null });
+          toast(card.isTemplate ? 'Ist jetzt eine normale Karte.' : 'Ist jetzt eine Vorlagenkarte.', 'success');
+        }),
+      }, icon('settings'), card.isTemplate ? ' Vorlage aufheben' : ' Als Vorlage markieren'),
       h('button', { class: 'btn btn-sm btn-block', onclick: async () => {
         try { await api.patch(`/cards/${card.id}`, { archived: true }); toast('Karte archiviert.'); onChange?.(); closeCardModal(); } catch (err) { showError(err); }
       } }, icon('archive'), ' Archivieren'),

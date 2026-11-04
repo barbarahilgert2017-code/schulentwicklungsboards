@@ -39,11 +39,28 @@ export function createBoardService(db) {
     return Number(lastInsertRowid);
   }
 
-  function createCard(boardId, listId, userId, { title, description = '', dueDate = null }) {
+  function createCard(boardId, listId, userId, { title, description = '', dueDate = null, isTemplate = false }) {
     const { lastInsertRowid } = db.prepare(
-      'INSERT INTO cards (board_id, list_id, title, description, due_date, position, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).run(boardId, listId, title, description, dueDate, nextPosition('cards', 'list_id', listId), userId);
+      'INSERT INTO cards (board_id, list_id, title, description, due_date, position, created_by, is_template) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(boardId, listId, title, description, dueDate, nextPosition('cards', 'list_id', listId), userId, isTemplate ? 1 : 0);
     return Number(lastInsertRowid);
+  }
+
+  /**
+   * Kopiert eine Karte (z. B. aus einer Vorlagenkarte): Titel, Beschreibung, Labels,
+   * Uhrzeiten und Checklisten (alle Punkte offen). Termine, Personen, Kommentare und Anhänge nicht.
+   */
+  function copyCard(sourceId, listId, userId, { title, index } = {}) {
+    const src = db.prepare('SELECT * FROM cards WHERE id = ?').get(sourceId);
+    const id = createCard(src.board_id, listId, userId, { title: title || src.title, description: src.description });
+    db.prepare('UPDATE cards SET start_time = ?, due_time = ? WHERE id = ?').run(src.start_time, src.due_time, id);
+    db.prepare('INSERT INTO card_labels (card_id, label_id) SELECT ?, label_id FROM card_labels WHERE card_id = ?').run(id, sourceId);
+    for (const cl of db.prepare('SELECT * FROM checklists WHERE card_id = ? ORDER BY position, id').all(sourceId)) {
+      const items = db.prepare('SELECT text FROM checklist_items WHERE checklist_id = ? ORDER BY position, id').all(cl.id).map((i) => i.text);
+      createChecklist(id, cl.title, items);
+    }
+    if (index !== undefined) place('cards', 'list_id', listId, id, index);
+    return id;
   }
 
   function createChecklist(cardId, title, items = []) {
@@ -74,8 +91,9 @@ export function createBoardService(db) {
           const listId = createList(boardId, list.title);
           for (const c of list.cards || []) {
             const cardId = createCard(boardId, listId, userId, {
-              title: c.title, description: c.description || '', dueDate: c.dueInDays ? addDays(c.dueInDays) : null,
+              title: c.title, description: c.description || '', dueDate: c.dueInDays ? addDays(c.dueInDays) : null, isTemplate: !!c.template,
             });
+            if (c.dueTime) db.prepare('UPDATE cards SET due_time = ? WHERE id = ?').run(c.dueTime, cardId);
             for (const name of c.labels || []) if (labelIds.has(name)) addLabel.run(cardId, labelIds.get(name));
             for (const cl of c.checklists || []) createChecklist(cardId, cl.title, cl.items);
           }
@@ -114,7 +132,7 @@ export function createBoardService(db) {
   /** Kartendaten für die Board-Übersicht. */
   function cardSummaries(where, ...params) {
     const cards = db.prepare(`
-      SELECT c.id, c.list_id, c.title, c.position, c.start_date, c.due_date, c.completed, c.archived,
+      SELECT c.id, c.list_id, c.title, c.position, c.start_date, c.due_date, c.start_time, c.due_time, c.is_template, c.completed, c.archived,
              length(c.description) > 0 AS has_desc,
              (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id) AS items_total,
              (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id AND i.done = 1) AS items_done,
@@ -135,6 +153,7 @@ export function createBoardService(db) {
     }
     return cards.map((c) => ({
       id: c.id, listId: c.list_id, title: c.title, position: c.position, startDate: c.start_date, dueDate: c.due_date,
+      startTime: c.start_time, dueTime: c.due_time, isTemplate: !!c.is_template,
       completed: !!c.completed, archived: !!c.archived, hasDescription: !!c.has_desc,
       checklist: { done: c.items_done, total: c.items_total }, attachments: c.attachments, comments: c.comments,
       labels: lab.get(c.id) || [], members: mem.get(c.id) || [],
@@ -186,7 +205,7 @@ export function createBoardService(db) {
   }
 
   return {
-    log, touchBoard, nextPosition, place, createList, createCard, createChecklist, createBoard,
+    log, touchBoard, nextPosition, place, createList, createCard, copyCard, createChecklist, createBoard,
     boardRow, boardJson, members, labels, cardSummaries, fullBoard, fullCard, activities,
   };
 }

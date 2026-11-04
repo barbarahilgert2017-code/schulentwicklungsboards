@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { Readable } from 'node:stream';
 import { requireUser } from '../auth.js';
-import { HttpError, bad, text, date, int, bool, updateFields } from '../http.js';
+import { HttpError, bad, text, date, time, int, bool, updateFields } from '../http.js';
 import { tx } from '../db.js';
 import { NextcloudError, cleanPath, joinPath, safeName, isInside } from '../nextcloud.js';
 
@@ -39,11 +39,25 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       description: text(req.body.description, { name: 'Beschreibung', max: 20000, trim: false }),
       start_date: date(req.body.startDate, 'Startdatum'),
       due_date: date(req.body.dueDate, 'Fälligkeitsdatum'),
+      start_time: time(req.body.startTime, 'Startzeit'),
+      due_time: time(req.body.dueTime, 'Uhrzeit'),
+      is_template: bool(req.body.isTemplate),
       completed: bool(req.body.completed),
       archived: bool(req.body.archived),
     };
+    // Ohne Datum keine Uhrzeit
+    // Datum entfernen löscht die Uhrzeit (außer bei Vorlagen: dort zählt nur die Uhrzeit)
+    const isTpl = (fields.is_template ?? before.is_template) === 1;
+    if (fields.start_date === null && !isTpl) fields.start_time = null;
+    if (fields.due_date === null && !isTpl) fields.due_time = null;
+    const template = fields.is_template ?? before.is_template;
+    if (fields.start_time && !template && !(fields.start_date ?? before.start_date)) throw bad('Bitte zuerst ein Startdatum wählen.');
+    if (fields.due_time && !template && !(fields.due_date ?? before.due_date)) throw bad('Bitte zuerst ein Fälligkeitsdatum wählen.');
     tx(db, () => {
       updateFields(db, 'cards', id, fields, { touch: true });
+      if (fields.is_template !== undefined && fields.is_template !== before.is_template) {
+        svc.log(boardId, id, req.user.id, fields.is_template ? 'card.template' : 'card.untemplate');
+      }
       if (fields.archived === 0 && before.archived) {
         // Wiederherstellen: Liste muss aktiv sein, sonst in erste aktive Liste verschieben
         const list = db.prepare('SELECT archived FROM lists WHERE id = ?').get(before.list_id);
@@ -62,8 +76,11 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       if (fields.archived !== undefined && fields.archived !== before.archived) {
         svc.log(boardId, id, req.user.id, fields.archived ? 'card.archived' : 'card.restored');
       }
-      if (fields.due_date !== undefined && fields.due_date !== before.due_date) {
-        svc.log(boardId, id, req.user.id, 'card.due', { due: fields.due_date });
+      const dueChanged = (fields.due_date !== undefined && fields.due_date !== before.due_date)
+        || (fields.due_time !== undefined && fields.due_time !== before.due_time);
+      if (dueChanged) {
+        const after = db.prepare('SELECT due_date, due_time FROM cards WHERE id = ?').get(id);
+        svc.log(boardId, id, req.user.id, 'card.due', { due: after.due_date, time: after.due_time });
       }
       if (fields.title && fields.title !== before.title) {
         svc.log(boardId, id, req.user.id, 'card.renamed', { from: before.title, to: fields.title });
@@ -71,6 +88,23 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       svc.touchBoard(boardId);
     });
     res.json(svc.cardSummaries('c.id = ?', id)[0]);
+  });
+
+  // Karte kopieren – auch „neue Karte aus Vorlagenkarte“
+  r.post('/cards/:id/copy', (req, res) => {
+    const { boardId } = access.via('card', req.user, req.params.id, 'editor');
+    const src = cardRow(int(req.params.id));
+    const listId = req.body.listId === undefined ? src.list_id : int(req.body.listId, 'Liste');
+    const target = db.prepare('SELECT board_id, title FROM lists WHERE id = ?').get(listId);
+    if (!target || target.board_id !== boardId) throw bad('Zielliste gehört nicht zu diesem Board.');
+    const title = text(req.body.title, { name: 'Titel', max: 300 }) || undefined;
+    const id = tx(db, () => {
+      const newId = svc.copyCard(src.id, listId, req.user.id, { title, index: req.body.index === undefined ? undefined : int(req.body.index, 'Index') });
+      svc.log(boardId, newId, req.user.id, 'card.created', { list: target.title, [src.is_template ? 'fromTemplate' : 'copyOf']: src.title });
+      svc.touchBoard(boardId);
+      return newId;
+    });
+    res.status(201).json(svc.cardSummaries('c.id = ?', id)[0]);
   });
 
   r.post('/cards/:id/move', (req, res) => {
@@ -323,17 +357,17 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
 
   r.get('/my/tasks', (req, res) => {
     const cards = db.prepare(`
-      SELECT c.id, c.title, c.due_date AS dueDate, c.completed, b.id AS boardId, b.title AS boardTitle, b.color AS boardColor, l.title AS listTitle
+      SELECT c.id, c.title, c.due_date AS dueDate, c.due_time AS dueTime, c.completed, b.id AS boardId, b.title AS boardTitle, b.color AS boardColor, l.title AS listTitle
       FROM card_members cm JOIN cards c ON c.id = cm.card_id JOIN boards b ON b.id = c.board_id JOIN lists l ON l.id = c.list_id
       JOIN board_members m ON m.board_id = b.id AND m.user_id = cm.user_id
-      WHERE cm.user_id = ? AND c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.completed = 0
+      WHERE cm.user_id = ? AND c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.completed = 0 AND c.is_template = 0
       ORDER BY c.due_date IS NULL, c.due_date, b.title`).all(req.user.id);
     const items = db.prepare(`
       SELECT i.id, i.text, i.due_date AS dueDate, c.id AS cardId, c.title AS cardTitle, b.id AS boardId, b.title AS boardTitle, b.color AS boardColor
       FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id JOIN cards c ON c.id = cl.card_id
       JOIN boards b ON b.id = c.board_id JOIN lists l ON l.id = c.list_id
       JOIN board_members m ON m.board_id = b.id AND m.user_id = i.assignee_id
-      WHERE i.assignee_id = ? AND i.done = 0 AND c.archived = 0 AND l.archived = 0 AND b.archived = 0
+      WHERE i.assignee_id = ? AND i.done = 0 AND c.archived = 0 AND l.archived = 0 AND b.archived = 0 AND c.is_template = 0
       ORDER BY i.due_date IS NULL, i.due_date, b.title`).all(req.user.id);
     res.json({ cards: cards.map((c) => ({ ...c, completed: !!c.completed })), items });
   });

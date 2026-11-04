@@ -2,6 +2,7 @@ import { api } from './api.js';
 import { h, put, clear, icon, toast, showError, openModal, confirmDialog, avatar, LABEL_COLORS } from './dom.js';
 import { state, ROLE_LABELS } from './state.js';
 import { openFilePicker } from './filepicker.js';
+import { openQrModal } from './qr.js';
 
 const TABS = [
   ['general', 'Allgemein'],
@@ -181,6 +182,7 @@ export function openBoardSettings(data, tab = 'general', onChange) {
                 ` · ${who || 'noch niemand beigetreten'}`)),
             h('div', { class: 'inline-form' }, input,
               h('button', { class: 'btn btn-primary', onclick: () => copy(l.link, input) }, 'Kopieren'),
+              h('button', { class: 'btn', title: 'QR-Code anzeigen, z. B. für den Beamer', onclick: () => openQrModal({ link: l.link, boardTitle: d.board.title, role: l.role }) }, 'QR-Code'),
               h('button', {
                 class: 'btn btn-danger', title: 'Link löschen',
                 onclick: async () => {

@@ -19,9 +19,9 @@ export default function boardRoutes({ db, config, nc, svc, access, invitations }
   r.get('/boards', (req, res) => {
     const rows = db.prepare(`
       SELECT b.*, m.role, u.name AS folder_owner_name,
-        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0) AS card_count,
-        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0 AND c.completed = 1) AS done_count,
-        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0 AND c.completed = 0
+        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0 AND c.is_template = 0) AS card_count,
+        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0 AND c.is_template = 0 AND c.completed = 1) AS done_count,
+        (SELECT COUNT(*) FROM cards c WHERE c.board_id = b.id AND c.archived = 0 AND c.is_template = 0 AND c.completed = 0
             AND c.due_date IS NOT NULL AND c.due_date < date('now')) AS overdue_count,
         (SELECT COUNT(*) FROM board_members bm WHERE bm.board_id = b.id) AS member_count
       FROM boards b JOIN board_members m ON m.board_id = b.id AND m.user_id = ?

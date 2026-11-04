@@ -210,14 +210,22 @@ export function fmtSize(n) {
   return `${(n / 1024 ** 2).toFixed(1)} MB`;
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+/** „12. Nov. 14:00“ bzw. „12.11.2026, 14:00 Uhr“ */
+export const fmtWhenShort = (d, t) => (d ? `${fmtDateShort(d)}${t ? ` ${t}` : ''}` : '');
+export const fmtWhen = (d, t) => (d ? `${fmtDate(d)}${t ? `, ${t} Uhr` : ''}` : '');
 
 /** 'overdue' | 'soon' (≤ 3 Tage) | 'ok' | null */
-export function dueState(due, completed) {
+export function dueState(due, completed, time = null) {
   if (!due) return null;
   if (completed) return 'done';
   const diff = (new Date(`${due}T00:00:00`) - new Date(`${today()}T00:00:00`)) / 86400000;
   if (diff < 0) return 'overdue';
+  if (diff === 0 && time) {
+    const now = new Date();
+    if (`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` > time) return 'overdue';
+  }
   if (diff <= 3) return 'soon';
   return 'ok';
 }
