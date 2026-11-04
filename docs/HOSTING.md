@@ -12,7 +12,11 @@ In dieser Reihenfolge prüfen:
 
 > Bitte vor der Inbetriebnahme mit der/dem schulischen Datenschutzbeauftragten und ggf. dem Schulträger abstimmen. Hinweise dazu in [DATENSCHUTZ.md](DATENSCHUTZ.md).
 
-## Installation mit Docker Compose (Ubuntu 24.04)
+## Installation
+
+**Empfohlen:** das Installationsskript, siehe [INSTALLATION.md](INSTALLATION.md) – ein Befehl richtet alles Folgende automatisch ein.
+
+## Manuelle Installation mit Docker Compose (Ubuntu 24.04)
 
 ### 1. Server vorbereiten
 

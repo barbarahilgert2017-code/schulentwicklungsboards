@@ -13,6 +13,7 @@ Ein schlankes, selbst gehostetes Kanban-Werkzeug (Trello-ähnlich) für **Schule
 - Rollen pro Board: *Verantwortlich*, *Bearbeiten*, *Lesen* (Lesende dürfen kommentieren – z. B. Schulleitung oder Kollegium)
 - **Einladungen per E-Mail**: Personen ohne Konto erhalten einen persönlichen, ablaufenden Link, mit dem sie sich registrieren und direkt dem Board beitreten – auch wenn die freie Registrierung geschlossen ist. Bestehende Konten werden direkt hinzugefügt und benachrichtigt. Ohne SMTP-Server lässt sich der Link kopieren und selbst weitergeben.
 - Aktivitätsprotokoll, JSON-Export pro Board, Konto-Selbstlöschung
+- **Verwaltung** für Admins: Konten, Administrationsrechte, Links zum Zurücksetzen von Passwörtern, Test-E-Mail; „Passwort vergessen“ per E-Mail
 
 **Nextcloud**
 - Anmeldung über den offiziellen **Login Flow v2** – die App erhält ein eigenes, jederzeit widerrufbares App-Passwort; das Nextcloud-Passwort sieht sie nie
@@ -71,12 +72,15 @@ Die Quellen liegen in [`demo/`](demo/) (`mock-api.js` bildet die REST-API im Bro
 
 ## Betrieb in Deutschland
 
-Produktiv mit Docker Compose und Caddy (automatisches HTTPS):
+Auf einem frischen Server (Ubuntu 24.04 / Debian 12) mit einem Befehl – richtet Docker, HTTPS, Firewall, Sicherheitsupdates, tägliche Datensicherung und den Verwaltungsbefehl `seb` ein:
 
 ```bash
-cp .env.example .env    # DOMAIN, APP_SECRET, Nextcloud-Adresse eintragen
-docker compose up -d --build
+curl -fsSL https://raw.githubusercontent.com/barbarahilgert2017-code/schulentwicklungsboards/main/deploy/install.sh | sudo bash
 ```
+
+Das erste Konto (Administration) lässt sich nur mit dem Einrichtungscode anlegen, den das Skript am Ende anzeigt. **Anleitung ohne Vorkenntnisse, inkl. Server mieten und iPad: [docs/INSTALLATION.md](docs/INSTALLATION.md)**
+
+Manuell geht es auch: `.env` aus `.env.example` anlegen und `docker compose up -d --build`.
 
 Schritt-für-Schritt-Anleitung, Anbieter mit Rechenzentren in Deutschland, Sicherung und Updates: **[docs/HOSTING.md](docs/HOSTING.md)**
 Hinweise für Datenschutzbeauftragte (verarbeitete Daten, AVV, VVT): **[docs/DATENSCHUTZ.md](docs/DATENSCHUTZ.md)**
