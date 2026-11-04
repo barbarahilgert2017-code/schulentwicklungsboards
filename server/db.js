@@ -174,6 +174,18 @@ const MIGRATIONS = [
   );
   CREATE INDEX invitations_board ON invitations(board_id);
   `,
+  // 3: Passwort zurücksetzen
+  `
+  CREATE TABLE password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX password_resets_user ON password_resets(user_id);
+  `,
 ];
 
 export function openDb(file) {

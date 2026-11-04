@@ -420,3 +420,22 @@ input[readonly] { background: var(--surface-2); }
 .invite-box { width: 100%; max-width: 440px; }
 .invite-box h1 { margin-bottom: .25rem; }
 .pending-invites h3 { margin-top: 1.5rem; font-size: 1rem; }
+
+/* ---- Verwaltung ---- */
+.admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.kv-list { margin: 0; display: flex; flex-direction: column; gap: .45rem; }
+.kv { display: grid; grid-template-columns: 9.5rem 1fr; gap: .5rem; }
+.kv dt { color: var(--muted); font-size: .88rem; }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+.user-table { width: 100%; border-collapse: collapse; }
+.user-table th { text-align: left; font-size: .8rem; color: var(--muted); font-weight: 600; padding: .4rem .5rem; border-bottom: 1px solid var(--border); }
+.user-table td { padding: .55rem .5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.user-table .num { font-variant-numeric: tabular-nums; }
+.user-table .right { text-align: right; }
+.user-cell { display: flex; gap: .6rem; align-items: center; }
+.admin-badge { margin-left: .4rem; background: color-mix(in srgb, var(--primary) 15%, var(--surface)); color: var(--primary); }
+.action-list { display: flex; flex-direction: column; gap: .5rem; }
+.forgot-link { text-align: right; margin: -.5rem 0 .75rem; font-size: .88rem; }
+code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .88em; background: var(--surface-2); padding: .05rem .3rem; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

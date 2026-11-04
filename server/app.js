@@ -12,6 +12,8 @@ import nextcloudRoutes from './routes/nextcloud.js';
 import boardRoutes from './routes/boards.js';
 import cardRoutes from './routes/cards.js';
 import invitationRoutes from './routes/invitations.js';
+import adminRoutes from './routes/admin.js';
+import { createUserService } from './users.js';
 import { createMailer } from './mailer.js';
 import { createInvitationService } from './invitations.js';
 
@@ -27,6 +29,7 @@ export function createApp({ config, db, mailer = createMailer(config) }) {
   ctx.nc = createNcService(ctx);
   app.locals.nc = ctx.nc;
   ctx.invitations = createInvitationService(ctx);
+  ctx.users = createUserService(ctx);
 
   // Sicherheits-Header: keine externen Quellen, kein Tracking, kein Einbetten.
   app.use((_req, res, next) => {
@@ -51,6 +54,7 @@ export function createApp({ config, db, mailer = createMailer(config) }) {
   api.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   api.use('/auth', authRoutes(ctx));
   api.use('/nextcloud', nextcloudRoutes(ctx));
+  api.use('/admin', adminRoutes(ctx));
   api.use(invitationRoutes(ctx)); // enthält öffentliche Routen → vor den Routern mit Login-Pflicht
   api.use(boardRoutes(ctx));
   api.use(cardRoutes(ctx));

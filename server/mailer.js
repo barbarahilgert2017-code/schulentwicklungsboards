@@ -63,3 +63,25 @@ export function addedMail({ appName, inviter, board, role, link }) {
     ], { label: 'Board öffnen', url: link }),
   };
 }
+
+export function resetMail({ appName, name, link, hours, byAdmin }) {
+  const subject = `${appName}: Passwort neu setzen`;
+  return {
+    subject,
+    ...layout(appName, subject, [
+      `Hallo ${name},`,
+      byAdmin
+        ? 'die Administration hat für dich einen Link zum Setzen eines neuen Passworts erstellt.'
+        : 'für dein Konto wurde ein neues Passwort angefordert. Falls du das nicht warst, kannst du diese E-Mail ignorieren.',
+      `Der Link ist ${hours} Stunden gültig und funktioniert nur einmal.`,
+    ], { label: 'Neues Passwort setzen', url: link }),
+  };
+}
+
+export function testMail({ appName, name }) {
+  const subject = `${appName}: Test-E-Mail`;
+  return {
+    subject,
+    text: `Hallo ${name},\n\ndiese Test-E-Mail zeigt: Der E-Mail-Versand von ${appName} funktioniert. Einladungen und „Passwort vergessen“ werden zugestellt.\n\n— ${appName}`,
+  };
+}

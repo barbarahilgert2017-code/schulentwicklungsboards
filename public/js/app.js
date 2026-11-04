@@ -3,6 +3,7 @@ import { h, put, clear, icon, toast, showError, openModal, fmtDate, dueState, av
 import { state, navigate } from './state.js';
 import { renderBoard, closeBoard } from './board.js';
 import { renderAccount } from './account.js';
+import { renderAdmin } from './admin.js';
 
 const main = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -22,10 +23,11 @@ function renderNav() {
   if (!state.me) return;
   const route = location.hash || '#/';
   const link = (href, label, ic) => h('a', { href, class: (route === href || (href !== '#/' && route.startsWith(href))) ? 'active' : '' }, icon(ic), h('span', {}, label));
-  nav.append(
+  put(nav,
     link('#/', 'Boards', 'card'),
     link('#/tasks', 'Meine Aufgaben', 'checklist'),
     link('#/account', 'Konto', 'user'),
+    state.me.isAdmin ? link('#/admin', 'Verwaltung', 'settings') : null,
     h('button', { class: 'btn btn-ghost', onclick: logout }, 'Abmelden'),
   );
 }
@@ -40,38 +42,71 @@ async function logout() {
 // ---------------- Anmeldung / Registrierung ----------------
 
 function renderAuth() {
-  let mode = 'login';
+  const setup = !!state.config.needsSetup;
+  let mode = setup ? 'register' : 'login';
   const box = h('div', { class: 'auth-box' });
   const draw = () => {
     clear(box);
     const err = h('p', { class: 'form-error', role: 'alert' });
-    const email = h('input', { type: 'email', name: 'email', required: true, autocomplete: 'email', autofocus: true });
+    const email = h('input', { type: 'email', name: 'email', required: true, autocomplete: 'email', autofocus: !setup });
     const pw = h('input', { type: 'password', name: 'password', required: true, minlength: mode === 'register' ? 10 : undefined, autocomplete: mode === 'register' ? 'new-password' : 'current-password' });
     const name = h('input', { type: 'text', name: 'name', required: true, autocomplete: 'name' });
-    const form = h('form', {
+    const code = h('input', { type: 'text', name: 'setupCode', required: true, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', autofocus: true, placeholder: 'XXXX-XXXX-XXXX' });
+    const switchTo = (m) => (e) => { e.preventDefault(); mode = m; draw(); };
+
+    if (mode === 'forgot') {
+      put(box, h('form', {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          err.textContent = '';
+          try {
+            const r = await api.post('/auth/forgot', { email: email.value });
+            clear(box).append(h('div', {},
+              h('h1', {}, 'Passwort vergessen'),
+              r.mailEnabled
+                ? h('p', {}, `Falls es ein Konto für ${email.value} gibt, ist jetzt eine E-Mail mit einem Link zum Setzen eines neuen Passworts unterwegs. Der Link ist 2 Stunden gültig. Bitte auch im Spam-Ordner nachsehen.`)
+                : h('p', {}, 'Auf diesem Server ist kein E-Mail-Versand eingerichtet. Bitte wende dich an die Administration – sie kann dir unter „Verwaltung“ einen Link zum Zurücksetzen erstellen.'),
+              h('p', { class: 'auth-switch' }, h('a', { href: '#', onclick: switchTo('login') }, 'Zurück zur Anmeldung'))));
+          } catch (ex) { err.textContent = ex.message; }
+        },
+      },
+      h('h1', {}, 'Passwort vergessen'),
+      h('p', { class: 'muted' }, 'Gib deine E-Mail-Adresse ein. Du bekommst einen Link, mit dem du ein neues Passwort setzen kannst.'),
+      h('label', { class: 'field' }, h('span', {}, 'Dienstliche E-Mail'), email),
+      err,
+      h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Link anfordern'),
+      h('p', { class: 'auth-switch' }, h('a', { href: '#', onclick: switchTo('login') }, 'Zurück zur Anmeldung'))));
+      return;
+    }
+
+    put(box, h('form', {
       onsubmit: async (e) => {
         e.preventDefault();
         err.textContent = '';
         try {
-          if (mode === 'register') await api.post('/auth/register', { email: email.value, name: name.value, password: pw.value });
+          if (mode === 'register') await api.post('/auth/register', { email: email.value, name: name.value, password: pw.value, setupCode: code.value });
           else await api.post('/auth/login', { email: email.value, password: pw.value });
           await loadMe();
+          if (setup) toast('Willkommen! Du bist jetzt Administratorin bzw. Administrator dieser Installation.', 'success');
           route();
         } catch (ex) { err.textContent = ex.message; }
       },
     },
-    h('h1', {}, mode === 'register' ? 'Konto anlegen' : 'Anmelden'),
+    h('h1', {}, setup ? 'Ersteinrichtung' : mode === 'register' ? 'Konto anlegen' : 'Anmelden'),
+    setup ? h('p', { class: 'muted' }, 'Lege das erste Konto an. Es erhält Administrationsrechte und kann später weitere Personen verwalten.') : null,
+    setup && state.config.setupCodeRequired
+      ? h('label', { class: 'field' }, h('span', {}, 'Einrichtungscode'), code, h('small', { class: 'hint' }, 'Wurde am Ende der Installation auf dem Server angezeigt.')) : null,
     mode === 'register' ? h('label', { class: 'field' }, h('span', {}, 'Name'), name) : null,
     h('label', { class: 'field' }, h('span', {}, 'Dienstliche E-Mail'), email),
-    mode === 'register' && state.config.registrationDomains?.length
+    mode === 'register' && !setup && state.config.registrationDomains?.length
       ? h('p', { class: 'hint' }, `Erlaubt: ${state.config.registrationDomains.map((d) => `@${d}`).join(', ')}`) : null,
     h('label', { class: 'field' }, h('span', {}, mode === 'register' ? 'Passwort (mind. 10 Zeichen)' : 'Passwort'), pw),
+    mode === 'login' ? h('p', { class: 'forgot-link' }, h('a', { href: '#', onclick: switchTo('forgot') }, 'Passwort vergessen?')) : null,
     err,
-    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, mode === 'register' ? 'Registrieren' : 'Anmelden'),
-    state.config.allowRegistration ? h('p', { class: 'auth-switch' },
+    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, setup ? 'Einrichten' : mode === 'register' ? 'Registrieren' : 'Anmelden'),
+    !setup && state.config.allowRegistration ? h('p', { class: 'auth-switch' },
       mode === 'register' ? 'Schon ein Konto? ' : 'Noch kein Konto? ',
-      h('a', { href: '#', onclick: (e) => { e.preventDefault(); mode = mode === 'register' ? 'login' : 'register'; draw(); } }, mode === 'register' ? 'Anmelden' : 'Registrieren')) : null);
-    box.append(form);
+      h('a', { href: '#', onclick: switchTo(mode === 'register' ? 'login' : 'register') }, mode === 'register' ? 'Anmelden' : 'Registrieren')) : null));
   };
   draw();
   main.append(h('div', { class: 'auth-page' },
@@ -83,6 +118,43 @@ function renderAuth() {
         h('li', {}, 'Dateien bleiben in eurer Nextcloud – jedes Board bekommt einen eigenen Ordner'),
         h('li', {}, 'Gehostet in Deutschland, ohne Tracking und ohne externe Dienste'))),
     box));
+}
+
+// ---------------- Neues Passwort setzen ----------------
+
+async function renderReset(token) {
+  const box = h('div', { class: 'auth-box invite-box' });
+  main.append(h('div', { class: 'invite-page' }, box));
+  let info;
+  try {
+    info = await api.get(`/auth/reset/${encodeURIComponent(token)}`);
+  } catch (err) {
+    put(box, h('h1', {}, 'Link ungültig'), h('p', {}, err.message), h('a', { class: 'btn', href: '#/' }, 'Zur Anmeldung'));
+    return;
+  }
+  const err = h('p', { class: 'form-error', role: 'alert' });
+  const pw = h('input', { type: 'password', required: true, minlength: 10, autocomplete: 'new-password', autofocus: true });
+  const pw2 = h('input', { type: 'password', required: true, minlength: 10, autocomplete: 'new-password' });
+  put(box, h('form', {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+      if (pw.value !== pw2.value) { err.textContent = 'Die beiden Passwörter stimmen nicht überein.'; return; }
+      try {
+        await api.post(`/auth/reset/${encodeURIComponent(token)}`, { password: pw.value });
+        await loadMe();
+        toast('Neues Passwort gespeichert. Du bist angemeldet.', 'success');
+        navigate('#/');
+      } catch (ex) { err.textContent = ex.message; }
+    },
+  },
+  h('h1', {}, 'Neues Passwort setzen'),
+  h('p', { class: 'muted' }, `Für ${info.name} (${info.email})`),
+  h('label', { class: 'field' }, h('span', {}, 'Neues Passwort (mind. 10 Zeichen)'), pw),
+  h('label', { class: 'field' }, h('span', {}, 'Wiederholen'), pw2),
+  err,
+  h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Passwort speichern'),
+  h('p', { class: 'hint' }, 'Danach wirst du auf allen anderen Geräten abgemeldet.')));
 }
 
 // ---------------- Einladung annehmen ----------------
@@ -290,6 +362,13 @@ async function renderTasks() {
 async function route() {
   const hash = location.hash || '#/';
   renderNav();
+  const reset = hash.match(/^#\/reset\/([\w-]+)/);
+  if (reset) {
+    closeBoard();
+    clear(main);
+    await renderReset(reset[1]);
+    return;
+  }
   const inv = hash.match(/^#\/invite\/([\w-]+)/);
   if (inv) {
     closeBoard();
@@ -312,6 +391,7 @@ async function route() {
     closeBoard();
     clear(main);
     if (hash.startsWith('#/tasks')) await renderTasks();
+    else if (hash.startsWith('#/admin') && state.me.isAdmin) await renderAdmin(main);
     else if (hash.startsWith('#/account')) await renderAccount(main, { reload: async () => { await loadMe(); route(); } });
     else await renderBoards();
   } catch (err) {

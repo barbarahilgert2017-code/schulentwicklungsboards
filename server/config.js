@@ -24,6 +24,8 @@ export function loadConfig(overrides = {}) {
     cookieSecure: bool(env.COOKIE_SECURE, production),
     trustProxy: bool(env.TRUST_PROXY, production),
     allowRegistration: bool(env.ALLOW_REGISTRATION, true),
+    // Pflicht-Code für die allererste Registrierung (wird Admin). Setzt das Installationsskript.
+    setupCode: env.SETUP_CODE || '',
     registrationDomains: list(env.REGISTRATION_EMAIL_DOMAINS),
     sessionDays: Number(env.SESSION_DAYS || 14),
     uploadMaxMb: Number(env.UPLOAD_MAX_MB || 50),

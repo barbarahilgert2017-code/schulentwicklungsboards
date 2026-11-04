@@ -2,13 +2,19 @@ import { Router } from 'express';
 import { hashPassword, verifyPassword } from '../crypto.js';
 import { createSession, destroySession, requireUser, createRateLimiter } from '../auth.js';
 import { HttpError, bad, text } from '../http.js';
-import { tx } from '../db.js';
+import crypto from 'node:crypto';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function authRoutes({ db, config, mailer, invitations }) {
+export default function authRoutes({ db, config, mailer, invitations, users }) {
   const r = Router();
   const limiter = createRateLimiter({ max: 10 });
+  const forgotLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60_000 });
+  const sameCode = (a, b) => {
+    const x = Buffer.from(String(a || '').trim().toUpperCase());
+    const y = Buffer.from(String(b).toUpperCase());
+    return x.length === y.length && crypto.timingSafeEqual(x, y);
+  };
   const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
 
   const validPassword = (pw) => {
@@ -29,8 +35,10 @@ export default function authRoutes({ db, config, mailer, invitations }) {
       nextcloud,
       config: {
         appName: config.appName,
-        // Die erste Person darf sich immer registrieren (wird Admin).
+        // Die erste Person darf sich immer registrieren (wird Admin) – mit Einrichtungscode, falls gesetzt.
         allowRegistration: config.allowRegistration || userCount() === 0,
+        needsSetup: userCount() === 0,
+        setupCodeRequired: userCount() === 0 && !!config.setupCode,
         registrationDomains: config.registrationDomains,
         nextcloudDefaultUrl: config.nextcloud.defaultUrl,
         nextcloudFixed: config.nextcloud.allowedHosts.length === 1 && !!config.nextcloud.defaultUrl,
@@ -48,6 +56,10 @@ export default function authRoutes({ db, config, mailer, invitations }) {
     const inv = req.body.inviteToken ? invitations.byToken(req.body.inviteToken) : null;
     if (req.body.inviteToken && (!inv || inv.accepted_at || inv.expired)) throw bad('Die Einladung ist ungültig oder abgelaufen.');
     if (!config.allowRegistration && !first && !inv) throw new HttpError(403, 'Die Registrierung ist deaktiviert. Bitte an die Administration wenden.');
+    if (first && config.setupCode) {
+      if (!limiter.check(`setup|${req.ip}`)) throw new HttpError(429, 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.');
+      if (!sameCode(req.body.setupCode, config.setupCode)) throw new HttpError(403, 'Der Einrichtungscode stimmt nicht. Er wurde am Ende der Installation angezeigt.');
+    }
     const email = inv ? inv.email.toLowerCase() : text(req.body.email, { name: 'E-Mail', required: true, max: 200 }).toLowerCase();
     const name = text(req.body.name, { name: 'Name', required: true, max: 100 });
     const password = validPassword(req.body.password);
@@ -100,22 +112,44 @@ export default function authRoutes({ db, config, mailer, invitations }) {
   r.delete('/me', requireUser, async (req, res) => {
     const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) throw bad('Passwort falsch.');
-    const blocking = db.prepare(`
-      SELECT b.title FROM boards b JOIN board_members m ON m.board_id = b.id AND m.user_id = ? AND m.role = 'owner'
-      WHERE (SELECT COUNT(*) FROM board_members o WHERE o.board_id = b.id AND o.role = 'owner') = 1
-        AND (SELECT COUNT(*) FROM board_members x WHERE x.board_id = b.id) > 1`).all(req.user.id);
-    if (blocking.length) {
-      throw new HttpError(409, `Du bist die einzige verantwortliche Person in: ${blocking.map((b) => `„${b.title}“`).join(', ')}. Bitte dort zuerst eine andere Person als verantwortlich eintragen.`);
+    if (req.user.isAdmin && db.prepare('SELECT COUNT(*) n FROM users WHERE is_admin = 1').get().n === 1
+        && userCount() > 1) {
+      throw new HttpError(409, 'Du bist die einzige Administratorin bzw. der einzige Administrator. Bitte zuerst unter „Verwaltung“ eine weitere Person zur Administration machen.');
     }
-    const nc = req.app.locals.nc?.clientFor(req.user.id, { required: false });
-    if (nc) await nc.revokeAppPassword().catch(() => {});
-    tx(db, () => {
-      db.prepare(`DELETE FROM boards WHERE id IN (SELECT board_id FROM board_members WHERE user_id = ?)
-                  AND (SELECT COUNT(*) FROM board_members x WHERE x.board_id = boards.id) = 1`).run(req.user.id);
-      db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
-    });
+    await users.deleteUser(req.user.id);
     destroySession(db, config, req, res);
     res.json({ ok: true });
+  });
+
+  // ---- Passwort vergessen ----
+  r.post('/forgot', async (req, res) => {
+    const email = text(req.body.email, { name: 'E-Mail', required: true, max: 200 }).toLowerCase();
+    if (!forgotLimiter.check(`${req.ip}|${email}`)) throw new HttpError(429, 'Zu viele Anfragen. Bitte später erneut versuchen.');
+    if (!mailer.enabled) {
+      return res.json({ ok: true, mailEnabled: false });
+    }
+    const u = db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(email);
+    // Immer gleiche Antwort – verrät nicht, ob es das Konto gibt.
+    if (u) await users.createResetLink(req, u, { hours: 2 });
+    res.json({ ok: true, mailEnabled: true });
+  });
+
+  r.get('/reset/:token', (req, res) => {
+    const r0 = users.resetByToken(req.params.token);
+    if (!r0 || r0.used_at || r0.expired) throw new HttpError(410, 'Dieser Link ist abgelaufen oder wurde schon benutzt. Bitte einen neuen anfordern.');
+    res.json({ email: r0.email, name: r0.name });
+  });
+
+  r.post('/reset/:token', (req, res) => {
+    const r0 = users.resetByToken(req.params.token);
+    if (!r0 || r0.used_at || r0.expired) throw new HttpError(410, 'Dieser Link ist abgelaufen oder wurde schon benutzt. Bitte einen neuen anfordern.');
+    const password = validPassword(req.body.password);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), r0.user_id);
+    db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE token_hash = ?").run(r0.token_hash);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(r0.user_id); // überall abmelden
+    const u = db.prepare('SELECT id, email, name, is_admin FROM users WHERE id = ?').get(r0.user_id);
+    const csrf = createSession(db, config, res, u.id);
+    res.json({ user: { id: u.id, email: u.email, name: u.name, isAdmin: !!u.is_admin }, csrf });
   });
 
   return r;
