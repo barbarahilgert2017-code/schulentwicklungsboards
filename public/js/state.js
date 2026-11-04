@@ -30,6 +30,9 @@ export const describeActivity = (a) => {
     case 'member.added': return `hat ${d.name} zum Board hinzugefügt`;
     case 'member.invited': return `hat ${d.email} eingeladen`;
     case 'member.joined': return 'ist dem Board über eine Einladung beigetreten';
+    case 'member.guest': return 'ist über einen Einladungslink als Gast beigetreten';
+    case 'link.created': return d.role === 'viewer' ? 'hat einen Einladungslink zum Lesen erstellt' : 'hat einen Einladungslink zum Bearbeiten erstellt';
+    case 'link.deleted': return d.guests ? `hat einen Einladungslink gelöscht (${d.guests} Gast/Gäste ausgesperrt)` : 'hat einen Einladungslink gelöscht';
     case 'member.removed': return `hat ${d.name} aus dem Board entfernt`;
     case 'folder.linked': return `hat den Nextcloud-Ordner „${d.path}“ verknüpft`;
     default: return a.action;

@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { hashPassword, verifyPassword } from '../crypto.js';
-import { createSession, destroySession, requireUser, createRateLimiter } from '../auth.js';
+import { createSession, destroySession, requireUser, noGuest, createRateLimiter } from '../auth.js';
+import { tx } from '../db.js';
 import { HttpError, bad, text } from '../http.js';
 import crypto from 'node:crypto';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function authRoutes({ db, config, mailer, invitations, users }) {
+export default function authRoutes({ db, config, mailer, invitations, users, share }) {
   const r = Router();
   const limiter = createRateLimiter({ max: 10 });
   const forgotLimiter = createRateLimiter({ max: 5, windowMs: 60 * 60_000 });
@@ -15,7 +16,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     const y = Buffer.from(String(b).toUpperCase());
     return x.length === y.length && crypto.timingSafeEqual(x, y);
   };
-  const userCount = () => db.prepare('SELECT COUNT(*) n FROM users').get().n;
+  const userCount = () => db.prepare('SELECT COUNT(*) n FROM users WHERE is_guest = 0').get().n;
 
   const validPassword = (pw) => {
     if (typeof pw !== 'string' || pw.length < 10) throw bad('Das Passwort muss mindestens 10 Zeichen lang sein.');
@@ -55,7 +56,9 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     // Gültige Einladung erlaubt die Registrierung auch bei geschlossener Registrierung / fremder Domain.
     const inv = req.body.inviteToken ? invitations.byToken(req.body.inviteToken) : null;
     if (req.body.inviteToken && (!inv || inv.accepted_at || inv.expired)) throw bad('Die Einladung ist ungültig oder abgelaufen.');
-    if (!config.allowRegistration && !first && !inv) throw new HttpError(403, 'Die Registrierung ist deaktiviert. Bitte an die Administration wenden.');
+    // Ein Einladungslink zum Board erlaubt die Registrierung ebenfalls (auch bei geschlossener Registrierung).
+    const link = req.body.shareToken && !first ? share.shareByToken(req.body.shareToken) : null;
+    if (!config.allowRegistration && !first && !inv && !link) throw new HttpError(403, 'Die Registrierung ist deaktiviert. Bitte an die Administration wenden.');
     if (first && config.setupCode) {
       if (!limiter.check(`setup|${req.ip}`)) throw new HttpError(429, 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.');
       if (!sameCode(req.body.setupCode, config.setupCode)) throw new HttpError(403, 'Der Einrichtungscode stimmt nicht. Er wurde am Ende der Installation angezeigt.');
@@ -64,7 +67,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     const name = text(req.body.name, { name: 'Name', required: true, max: 100 });
     const password = validPassword(req.body.password);
     if (!EMAIL_RE.test(email)) throw bad('Bitte eine gültige E-Mail-Adresse angeben.');
-    if (config.registrationDomains.length && !first && !inv) {
+    if (config.registrationDomains.length && !first && !inv && !link) {
       const domain = email.split('@')[1];
       if (!config.registrationDomains.includes(domain)) throw bad(`Registrierung nur mit Adressen von: ${config.registrationDomains.join(', ')}`);
     }
@@ -72,7 +75,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     const { lastInsertRowid } = db.prepare('INSERT INTO users (email, name, password_hash, is_admin) VALUES (?, ?, ?, ?)')
       .run(email, name, hashPassword(password), first ? 1 : 0);
     const user = { id: Number(lastInsertRowid), email, name, isAdmin: first };
-    const boardId = inv ? invitations.accept(inv, user) : null;
+    const boardId = inv ? invitations.accept(inv, user) : link ? tx(db, () => share.shareAddMember(link, user)) : null;
     const csrf = createSession(db, config, res, user.id);
     res.status(201).json({ user, csrf, boardId });
   });
@@ -82,7 +85,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     const key = `${req.ip}|${email}`;
     if (!limiter.check(key)) throw new HttpError(429, 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.');
-    const u = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const u = db.prepare('SELECT * FROM users WHERE email = ? AND is_guest = 0').get(email);
     if (!u || !verifyPassword(password, u.password_hash)) throw new HttpError(401, 'E-Mail oder Passwort falsch.');
     limiter.reset(key);
     const csrf = createSession(db, config, res, u.id);
@@ -101,6 +104,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
       db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
     }
     if (req.body.newPassword !== undefined) {
+      if (req.user.isGuest) throw bad('Gastzugänge haben kein Passwort.');
       const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
       if (!verifyPassword(String(req.body.currentPassword || ''), u.password_hash)) throw bad('Das aktuelle Passwort ist falsch.');
       db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(validPassword(req.body.newPassword)), req.user.id);
@@ -110,6 +114,11 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
 
   // Konto löschen (Art. 17 DSGVO). Boards, in denen man allein ist, werden mitgelöscht.
   r.delete('/me', requireUser, async (req, res) => {
+    if (req.user.isGuest) { // Gastzugang beenden – ohne Passwort
+      await users.deleteUser(req.user.id);
+      destroySession(db, config, req, res);
+      return res.json({ ok: true });
+    }
     const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
     if (!verifyPassword(String(req.body?.password || ''), u.password_hash)) throw bad('Passwort falsch.');
     if (req.user.isAdmin && db.prepare('SELECT COUNT(*) n FROM users WHERE is_admin = 1').get().n === 1
@@ -128,7 +137,7 @@ export default function authRoutes({ db, config, mailer, invitations, users }) {
     if (!mailer.enabled) {
       return res.json({ ok: true, mailEnabled: false });
     }
-    const u = db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(email);
+    const u = db.prepare('SELECT id, email, name FROM users WHERE email = ? AND is_guest = 0').get(email);
     // Immer gleiche Antwort – verrät nicht, ob es das Konto gibt.
     if (u) await users.createResetLink(req, u, { hours: 2 });
     res.json({ ok: true, mailEnabled: true });

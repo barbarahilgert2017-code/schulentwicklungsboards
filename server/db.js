@@ -186,6 +186,23 @@ const MIGRATIONS = [
   );
   CREATE INDEX password_resets_user ON password_resets(user_id);
   `,
+  // 4: Einladungslinks pro Board und Gastzugänge
+  `
+  ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE share_links (
+    id INTEGER PRIMARY KEY,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    token_enc TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('editor','viewer')),
+    label TEXT NOT NULL DEFAULT '',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT
+  );
+  CREATE INDEX share_links_board ON share_links(board_id);
+  ALTER TABLE board_members ADD COLUMN via_link_id INTEGER REFERENCES share_links(id) ON DELETE SET NULL;
+  `,
 ];
 
 export function openDb(file) {

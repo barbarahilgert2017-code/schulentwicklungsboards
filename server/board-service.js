@@ -100,11 +100,11 @@ export function createBoardService(db) {
   }
 
   function members(boardId) {
-    return db.prepare(`SELECT u.id, u.name, u.email, m.role, (n.user_id IS NOT NULL) AS nc
+    return db.prepare(`SELECT u.id, u.name, u.email, u.is_guest, m.role, (n.user_id IS NOT NULL) AS nc
                        FROM board_members m JOIN users u ON u.id = m.user_id
                        LEFT JOIN nextcloud_accounts n ON n.user_id = u.id
                        WHERE m.board_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END, u.name`)
-      .all(boardId).map((m) => ({ id: m.id, name: m.name, email: m.email, role: m.role, nextcloud: !!m.nc }));
+      .all(boardId).map((m) => ({ id: m.id, name: m.name, email: m.is_guest ? '' : m.email, role: m.role, nextcloud: !!m.nc, guest: !!m.is_guest }));
   }
 
   function labels(boardId) {

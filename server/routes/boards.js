@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireUser } from '../auth.js';
+import { requireUser, noGuest } from '../auth.js';
 import { HttpError, bad, text, color, bool, int, updateFields } from '../http.js';
 import { getTemplate, templateSummaries } from '../templates.js';
 import { tx } from '../db.js';
@@ -33,7 +33,7 @@ export default function boardRoutes({ db, config, nc, svc, access, invitations }
     })));
   });
 
-  r.post('/boards', async (req, res) => {
+  r.post('/boards', noGuest, async (req, res) => {
     const title = text(req.body.title, { name: 'Titel', required: true, max: 120 });
     const description = text(req.body.description, { name: 'Beschreibung', max: 2000 }) || '';
     const template = req.body.templateKey ? getTemplate(String(req.body.templateKey)) : null;

@@ -6,6 +6,7 @@ import { openFilePicker } from './filepicker.js';
 const TABS = [
   ['general', 'Allgemein'],
   ['members', 'Mitglieder'],
+  ['share', 'Einladungslink'],
   ['labels', 'Labels'],
   ['folder', 'Nextcloud-Ordner'],
 ];
@@ -32,9 +33,13 @@ export function openBoardSettings(data, tab = 'general', onChange) {
   function draw() {
     clear(tabsEl).append(...TABS.map(([k, label]) => h('button', {
       role: 'tab', 'aria-selected': String(k === current), class: k === current ? 'active' : '',
-      onclick: () => { current = k; draw(); },
+      onclick: async () => {
+        current = k;
+        try { d = await api.get(`/boards/${d.board.id}`); } catch { /* alter Stand */ }
+        draw();
+      },
     }, label)));
-    clear(panel).append(({ general, members, labels, folder })[current]());
+    clear(panel).append(({ general, members, share, labels, folder })[current]());
   }
 
   // ---- Allgemein ----
@@ -70,8 +75,8 @@ export function openBoardSettings(data, tab = 'general', onChange) {
       h('ul', { class: 'member-list' }, d.members.map((mem) => h('li', {},
         avatar(mem, 'md'),
         h('div', { class: 'member-info' },
-          h('strong', {}, mem.name, mem.id === state.me.id ? ' (ich)' : ''),
-          h('span', { class: 'muted small' }, mem.email, mem.nextcloud ? ' · Nextcloud verbunden' : '')),
+          h('strong', {}, mem.name, mem.id === state.me.id ? ' (ich)' : '', mem.guest ? h('span', { class: 'badge guest-badge' }, 'Gast') : null),
+          h('span', { class: 'muted small' }, mem.guest ? 'über Einladungslink, ohne Konto' : mem.email, mem.nextcloud ? ' · Nextcloud verbunden' : '')),
         owner()
           ? h('select', { 'aria-label': `Rolle von ${mem.name}`, onchange: run((e) => api.patch(`/boards/${d.board.id}/members/${mem.id}`, { role: e.target.value })) },
             ['owner', 'editor', 'viewer'].map((r) => h('option', { value: r, selected: r === mem.role }, ROLE_LABELS[r])))
@@ -140,6 +145,72 @@ export function openBoardSettings(data, tab = 'general', onChange) {
         h('p', { class: 'hint' }, 'Der Link ist nur für diese Person gedacht und läuft automatisch ab. Mit dem Link kann sie sich auch registrieren, wenn die Registrierung sonst geschlossen ist.'),
       ],
     });
+  }
+
+  // ---- Einladungslink ----
+  function share() {
+    const box = h('div', { class: 'share-settings' });
+    if (!owner()) {
+      box.append(h('p', { class: 'muted' }, 'Einladungslinks können nur Verantwortliche des Boards erstellen.'));
+      return box;
+    }
+    const role = h('select', { id: 'share-role', 'aria-label': 'Rechte' },
+      h('option', { value: 'editor' }, 'Bearbeiten'), h('option', { value: 'viewer' }, 'Lesen und kommentieren'));
+    const days = h('select', { id: 'share-days', 'aria-label': 'Gültigkeit' },
+      [['', 'unbegrenzt gültig'], ['7', '1 Woche gültig'], ['30', '1 Monat gültig'], ['180', '6 Monate gültig']].map(([v, l]) => h('option', { value: v }, l)));
+    const label = h('input', { type: 'text', id: 'share-label', maxlength: 80, placeholder: 'Wofür? z. B. „Kollegium“ (optional)', 'aria-label': 'Bezeichnung' });
+    const list = h('div', { class: 'share-list' }, h('p', { class: 'muted' }, 'Lädt …'));
+
+    const copy = async (link, input) => {
+      try { await navigator.clipboard.writeText(link); } catch { input?.select(); document.execCommand('copy'); }
+      toast('Link kopiert – jetzt z. B. per Mail, Messenger oder im Chat teilen.', 'success');
+    };
+    const load = async () => {
+      try {
+        const links = await api.get(`/boards/${d.board.id}/links`);
+        clear(list);
+        if (!links.length) { list.append(h('p', { class: 'muted' }, 'Noch kein Einladungslink.')); return; }
+        for (const l of links) {
+          const input = h('input', { type: 'text', value: l.link, readOnly: true, 'aria-label': 'Einladungslink', onfocus: (e) => e.target.select() });
+          const who = [l.guests ? `${l.guests} Gast${l.guests === 1 ? '' : 'e'}` : '', l.accounts ? `${l.accounts} mit Konto` : ''].filter(Boolean).join(', ');
+          list.append(h('div', { class: `share-item ${l.expired ? 'expired' : ''}` },
+            h('div', { class: 'share-item-head' },
+              h('span', { class: `badge ${l.role === 'viewer' ? '' : 'due-done'}` }, l.role === 'viewer' ? 'Lesen' : 'Bearbeiten'),
+              l.label ? h('strong', {}, l.label) : null,
+              h('span', { class: 'muted small' }, l.expired ? 'abgelaufen' : l.expiresAt ? `gültig bis ${new Date(l.expiresAt).toLocaleDateString('de-DE')}` : 'unbegrenzt gültig',
+                ` · ${who || 'noch niemand beigetreten'}`)),
+            h('div', { class: 'inline-form' }, input,
+              h('button', { class: 'btn btn-primary', onclick: () => copy(l.link, input) }, 'Kopieren'),
+              h('button', {
+                class: 'btn btn-danger', title: 'Link löschen',
+                onclick: async () => {
+                  const msg = l.guests ? `Link löschen? Die ${l.guests} Gäste, die über ihn beigetreten sind, verlieren sofort den Zugang. Ihre Karten und Kommentare bleiben.` : 'Link löschen? Er funktioniert danach nicht mehr.';
+                  if (!(await confirmDialog(msg, { ok: 'Löschen', danger: true }))) return;
+                  try { await api.del(`/links/${l.id}`); toast('Link gelöscht.'); await reload(); } catch (err) { showError(err); }
+                },
+              }, 'Löschen'))));
+        }
+      } catch (err) { clear(list).append(h('p', { class: 'form-error' }, err.message)); }
+    };
+    load();
+
+    box.append(
+      h('p', {}, 'Mit einem Einladungslink kommen Personen ohne Konto direkt aufs Board – sie geben nur ihren Namen ein. Wer schon ein Konto hat, wird über den Link Mitglied.'),
+      h('form', {
+        class: 'share-create',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          try {
+            const r = await api.post(`/boards/${d.board.id}/links`, { role: role.value, label: label.value, days: days.value ? Number(days.value) : undefined });
+            label.value = '';
+            await load();
+            copy(r.link);
+          } catch (err) { showError(err); }
+        },
+      }, role, days, label, h('button', { class: 'btn btn-primary', type: 'submit' }, icon('link'), ' Link erstellen')),
+      list,
+      h('p', { class: 'hint' }, 'Jeder Link ist geheim: Wer ihn hat, kommt aufs Board. Teilt ihn nur mit den richtigen Personen. Löscht ihr einen Link, sind alle Gäste, die über ihn gekommen sind, sofort ausgesperrt.'));
+    return box;
   }
 
   // ---- Labels ----

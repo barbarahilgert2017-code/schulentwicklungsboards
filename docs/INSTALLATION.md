@@ -110,7 +110,8 @@ Ihr braucht die **SMTP-Zugangsdaten** eines Postfachs, z. B. `boards@meine-schul
 
 ## 7. Kollegium einladen
 
-- **Einladen:** Board öffnen → auf die Personen-Symbole klicken → E-Mail-Adresse und Rolle eingeben. Die Person bekommt eine Einladung (oder ihr gebt den Link weiter).
+- **Einladungslink (am einfachsten):** Board öffnen → **Teilen** → **Link erstellen** → Link kopieren und z. B. per Mail oder Messenger verschicken. Wer ihn öffnet, gibt nur seinen Namen ein und ist auf dem Board – ohne Konto.
+- **Einzeln per E-Mail:** Board öffnen → auf die Personen-Symbole klicken → E-Mail-Adresse und Rolle eingeben.
 - **Selbst registrieren:** Wer die Adresse kennt und eine passende Schul-E-Mail hat, kann sich selbst registrieren. Nur per Einladung? Dann in `sudo seb einstellungen` die Zeile `ALLOW_REGISTRATION=false` setzen.
 - **Passwort vergessen:** über den Link auf der Anmeldeseite, oder die Administration erstellt unter **Verwaltung → Aktionen** einen Link.
 - **Nextcloud:** Jede Person verbindet ihre Nextcloud einmal unter **Konto**.

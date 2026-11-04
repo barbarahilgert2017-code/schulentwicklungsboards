@@ -3,13 +3,13 @@ import crypto from 'node:crypto';
 import {
   normalizeServerUrl, assertServerAllowed, startLoginFlow, pollLoginFlow, NextcloudClient, NextcloudError, cleanPath, joinPath, safeName,
 } from '../nextcloud.js';
-import { requireUser } from '../auth.js';
+import { requireUser, noGuest } from '../auth.js';
 import { HttpError, text } from '../http.js';
 import { entryJson } from '../nc-service.js';
 
 export default function nextcloudRoutes({ db, config, box, nc }) {
   const r = Router();
-  r.use(requireUser);
+  r.use(requireUser, noGuest);
   const ncCfg = config.nextcloud;
 
   // ---- Login Flow v2 starten ----

@@ -13,6 +13,7 @@ import boardRoutes from './routes/boards.js';
 import cardRoutes from './routes/cards.js';
 import invitationRoutes from './routes/invitations.js';
 import adminRoutes from './routes/admin.js';
+import shareRoutes from './routes/share.js';
 import { createUserService } from './users.js';
 import { createMailer } from './mailer.js';
 import { createInvitationService } from './invitations.js';
@@ -30,6 +31,7 @@ export function createApp({ config, db, mailer = createMailer(config) }) {
   app.locals.nc = ctx.nc;
   ctx.invitations = createInvitationService(ctx);
   ctx.users = createUserService(ctx);
+  ctx.share = shareRoutes(ctx);
 
   // Sicherheits-Header: keine externen Quellen, kein Tracking, kein Einbetten.
   app.use((_req, res, next) => {
@@ -56,6 +58,7 @@ export function createApp({ config, db, mailer = createMailer(config) }) {
   api.use('/nextcloud', nextcloudRoutes(ctx));
   api.use('/admin', adminRoutes(ctx));
   api.use(invitationRoutes(ctx)); // enthält öffentliche Routen → vor den Routern mit Login-Pflicht
+  api.use(ctx.share);
   api.use(boardRoutes(ctx));
   api.use(cardRoutes(ctx));
   api.use((_req, _res, next) => next(Object.assign(new Error('Nicht gefunden.'), { status: 404 })));

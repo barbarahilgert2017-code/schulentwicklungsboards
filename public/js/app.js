@@ -1,5 +1,5 @@
 import { api, setCsrf } from './api.js';
-import { h, put, clear, icon, toast, showError, openModal, fmtDate, dueState, avatar } from './dom.js';
+import { h, put, clear, icon, toast, showError, openModal, confirmDialog, fmtDate, dueState, avatar } from './dom.js';
 import { state, navigate } from './state.js';
 import { renderBoard, closeBoard } from './board.js';
 import { renderAccount } from './account.js';
@@ -34,6 +34,7 @@ function renderNav() {
 }
 
 async function logout() {
+  if (state.me?.isGuest && !(await confirmDialog('Als Gast abmelden? Über den Einladungslink kommst du jederzeit wieder hinein – dann als neuer Gast.', { ok: 'Abmelden' }))) return;
   await api.post('/auth/logout').catch(() => {});
   state.me = null;
   await loadMe();
@@ -119,6 +120,105 @@ function renderAuth() {
         h('li', {}, 'Dateien bleiben in eurer Nextcloud – jedes Board bekommt einen eigenen Ordner'),
         h('li', {}, 'Gehostet in Deutschland, ohne Tracking und ohne externe Dienste'))),
     box));
+}
+
+// ---------------- Einladungslink zum Board ----------------
+
+const GUEST_NAME_KEY = 'seb-gastname';
+
+async function renderShareJoin(token) {
+  const box = h('div', { class: 'auth-box invite-box' });
+  main.append(h('div', { class: 'invite-page' }, box));
+  let info;
+  try {
+    info = await api.get(`/share/${encodeURIComponent(token)}`);
+  } catch (err) {
+    put(box, h('h1', {}, 'Link ungültig'), h('p', {}, err.message), h('a', { class: 'btn', href: '#/' }, 'Zur Startseite'));
+    return;
+  }
+  const goBoard = (boardId) => { history.replaceState(null, '', `#/board/${boardId}`); route(); };
+  const join = async (body = {}) => (await api.post(`/share/${encodeURIComponent(token)}/join`, body)).boardId;
+
+  // Schon angemeldet (Konto oder Gast): direkt beitreten
+  if (state.me) {
+    try {
+      const boardId = await join();
+      toast(`Willkommen im Board „${info.boardTitle}“.`, 'success');
+      goBoard(boardId);
+    } catch (err) {
+      put(box, h('h1', {}, info.boardTitle), h('p', { class: 'form-error' }, err.message));
+    }
+    return;
+  }
+
+  const roleText = info.role === 'viewer' ? 'mitzulesen und zu kommentieren' : 'mitzuarbeiten';
+  let mode = 'guest';
+  const draw = () => {
+    clear(box);
+    const err = h('p', { class: 'form-error', role: 'alert' });
+    const head = [
+      h('p', { class: 'muted' }, 'Einladung'),
+      h('h1', { class: 'share-title', style: { '--board-color': info.color } }, info.boardTitle),
+      h('p', {}, `Du bist eingeladen, im Board ${roleText}.`),
+    ];
+    if (mode === 'guest') {
+      let saved = '';
+      try { saved = localStorage.getItem(GUEST_NAME_KEY) || ''; } catch { /* egal */ }
+      const name = h('input', { type: 'text', name: 'guestName', required: true, minlength: 2, maxlength: 60, autocomplete: 'name', autofocus: true, value: saved, placeholder: 'z. B. Anna Schmidt' });
+      put(box, head, h('form', {
+        onsubmit: async (e) => {
+          e.preventDefault();
+          err.textContent = '';
+          try {
+            const boardId = await join({ name: name.value });
+            try { localStorage.setItem(GUEST_NAME_KEY, name.value.trim()); } catch { /* egal */ }
+            await loadMe();
+            renderNav();
+            toast(`Willkommen, ${name.value.trim()}!`, 'success');
+            goBoard(boardId);
+          } catch (ex) { err.textContent = ex.message; }
+        },
+      },
+      h('label', { class: 'field' }, h('span', {}, 'Dein Name'), name,
+        h('small', { class: 'hint' }, 'So sehen die anderen, wer etwas geändert oder kommentiert hat.')),
+      err,
+      h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Zum Board'),
+      h('p', { class: 'hint center' }, 'Ohne Konto und Passwort. Du kommst auf diesem Gerät jederzeit über den Link wieder hinein.'),
+      h('p', { class: 'auth-switch' }, 'Lieber mit Konto? ',
+        h('a', { href: '#', onclick: (e) => { e.preventDefault(); mode = 'register'; draw(); } }, 'Konto anlegen'), ' · ',
+        h('a', { href: '#', onclick: (e) => { e.preventDefault(); mode = 'login'; draw(); } }, 'Anmelden'))));
+      return;
+    }
+    const nameIn = h('input', { type: 'text', required: true, autocomplete: 'name', autofocus: mode === 'register' });
+    const email = h('input', { type: 'email', required: true, autocomplete: 'email', autofocus: mode === 'login' });
+    const pw = h('input', { type: 'password', required: true, minlength: mode === 'register' ? 10 : undefined, autocomplete: mode === 'register' ? 'new-password' : 'current-password' });
+    put(box, head, h('form', {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        err.textContent = '';
+        try {
+          let boardId;
+          if (mode === 'register') {
+            boardId = (await api.post('/auth/register', { name: nameIn.value, email: email.value, password: pw.value, shareToken: token })).boardId;
+          } else {
+            await api.post('/auth/login', { email: email.value, password: pw.value });
+            boardId = await join();
+          }
+          await loadMe();
+          renderNav();
+          goBoard(boardId);
+        } catch (ex) { err.textContent = ex.message; }
+      },
+    },
+    h('h2', {}, mode === 'register' ? 'Konto anlegen und beitreten' : 'Anmelden und beitreten'),
+    mode === 'register' ? h('label', { class: 'field' }, h('span', {}, 'Name'), nameIn) : null,
+    h('label', { class: 'field' }, h('span', {}, 'Dienstliche E-Mail'), email),
+    h('label', { class: 'field' }, h('span', {}, mode === 'register' ? 'Passwort (mind. 10 Zeichen)' : 'Passwort'), pw),
+    err,
+    h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, mode === 'register' ? 'Konto anlegen & beitreten' : 'Anmelden & beitreten'),
+    h('p', { class: 'auth-switch' }, h('a', { href: '#', onclick: (e) => { e.preventDefault(); mode = 'guest'; draw(); } }, 'Doch lieber nur mit Namen beitreten'))));
+  };
+  draw();
 }
 
 // ---------------- Neues Passwort setzen ----------------
@@ -260,9 +360,11 @@ async function renderBoards() {
   put(main,
     h('div', { class: 'page-head' },
       h('h1', {}, 'Boards'),
-      h('button', { class: 'btn btn-primary', onclick: () => newBoardDialog(templates) }, icon('plus'), ' Neues Board')),
+      state.me.isGuest ? null : h('button', { class: 'btn btn-primary', onclick: () => newBoardDialog(templates) }, icon('plus'), ' Neues Board')),
+    state.me.isGuest ? h('p', { class: 'guest-note' }, `Du bist als Gast „${state.me.name}“ dabei und siehst die Boards, zu denen du einen Einladungslink bekommen hast. Mit einem Konto könntest du auch eigene Boards anlegen.`) : null,
     active.length
       ? h('div', { class: 'board-grid' }, active.map(tile))
+      : state.me.isGuest ? h('div', { class: 'empty' }, h('p', {}, 'Du hast im Moment keinen Zugang mehr zu einem Board. Bitte um einen neuen Einladungslink.'))
       : h('div', { class: 'empty' },
         h('p', {}, 'Noch keine Boards. Legt euer erstes Board an – am besten aus einer Vorlage für Schulentwicklung.'),
         h('button', { class: 'btn btn-primary', onclick: () => newBoardDialog(templates) }, 'Erstes Board anlegen')),
@@ -363,6 +465,13 @@ async function renderTasks() {
 async function route() {
   const hash = location.hash || '#/';
   renderNav();
+  const shareLink = hash.match(/^#\/l\/([\w-]+)/);
+  if (shareLink) {
+    closeBoard();
+    clear(main);
+    await renderShareJoin(shareLink[1]);
+    return;
+  }
   const reset = hash.match(/^#\/reset\/([\w-]+)/);
   if (reset) {
     closeBoard();

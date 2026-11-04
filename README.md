@@ -12,6 +12,7 @@ Ein schlankes, selbst gehostetes Kanban-Werkzeug (Trello-ähnlich) für **Schule
 - Filter nach Text, Label, „Mir zugewiesen“ und Fälligkeit; Archiv für Karten und Listen
 - **Meine Aufgaben**: alle mir zugewiesenen Karten und Checklistenpunkte über alle Boards, gruppiert nach Dringlichkeit
 - Rollen pro Board: *Verantwortlich*, *Bearbeiten*, *Lesen* (Lesende dürfen kommentieren – z. B. Schulleitung oder Kollegium)
+- **Einladungslink pro Board**: Ein Link für beliebig viele Personen – wer ihn öffnet, kommt nur mit seinem Namen als Gast aufs Board (Bearbeiten oder Lesen, optional mit Ablaufdatum). Gäste können keine eigenen Boards anlegen; Löschen des Links sperrt sie sofort aus. Wer ein Konto anlegen will, kann das über den Link tun.
 - **Einladungen per E-Mail**: Personen ohne Konto erhalten einen persönlichen, ablaufenden Link, mit dem sie sich registrieren und direkt dem Board beitreten – auch wenn die freie Registrierung geschlossen ist. Bestehende Konten werden direkt hinzugefügt und benachrichtigt. Ohne SMTP-Server lässt sich der Link kopieren und selbst weitergeben.
 - Aktivitätsprotokoll, JSON-Export pro Board, Konto-Selbstlöschung
 - **Verwaltung** für Admins: Konten, Administrationsrechte, Links zum Zurücksetzen von Passwörtern, Test-E-Mail; „Passwort vergessen“ per E-Mail

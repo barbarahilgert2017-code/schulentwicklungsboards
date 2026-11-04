@@ -6,6 +6,7 @@ let pollTimer = null;
 
 export async function renderAccount(main, { reload }) {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (state.me.isGuest) return renderGuestAccount(main, reload);
 
   // ---- Profil ----
   const name = h('input', { type: 'text', value: state.me.name, maxlength: 100, required: true });
@@ -56,6 +57,31 @@ export async function renderAccount(main, { reload }) {
 
   main.append(h('div', { class: 'page-head' }, h('h1', {}, 'Konto')),
     h('div', { class: 'account-grid' }, ncPanel(reload), profile, pwForm, delForm));
+}
+
+function renderGuestAccount(main, reload) {
+  const name = h('input', { type: 'text', value: state.me.name, maxlength: 60, required: true });
+  main.append(h('div', { class: 'page-head' }, h('h1', {}, 'Gastzugang')),
+    h('div', { class: 'account-grid' },
+      h('form', {
+        class: 'panel',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          try { await api.patch('/auth/me', { name: name.value }); toast('Gespeichert.'); await reload(); } catch (err) { showError(err); }
+        },
+      }, h('h2', {}, 'Dein Name'),
+      h('p', { class: 'muted small' }, 'Du bist über einen Einladungslink dabei – ohne Konto und Passwort.'),
+      h('label', { class: 'field' }, h('span', {}, 'Name'), name),
+      h('button', { class: 'btn btn-primary', type: 'submit' }, 'Speichern')),
+      h('section', { class: 'panel' }, h('h2', {}, 'Gastzugang beenden'),
+        h('p', { class: 'muted small' }, 'Danach bist du auf diesem Gerät abgemeldet. Deine Karten und Kommentare bleiben im Board, ohne deinen Namen. Über den Einladungslink kannst du später wieder beitreten.'),
+        h('button', {
+          class: 'btn btn-danger',
+          onclick: async () => {
+            if (!(await confirmDialog('Gastzugang wirklich beenden?', { ok: 'Beenden', danger: true }))) return;
+            try { await api.del('/auth/me'); toast('Gastzugang beendet.'); await reload(); } catch (err) { showError(err); }
+          },
+        }, 'Gastzugang beenden'))));
 }
 
 function ncPanel(reload) {

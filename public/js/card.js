@@ -352,7 +352,7 @@ function sidebar(edit) {
     return h('button', {
       class: `toggle ${on ? 'on' : ''}`, 'aria-pressed': String(on),
       onclick: act(() => (on ? api.del(`/cards/${card.id}/members/${m.id}`) : api.put(`/cards/${card.id}/members/${m.id}`))),
-    }, avatar(m, 'xs'), ` ${m.name}${m.id === state.me.id ? ' (ich)' : ''}`);
+    }, avatar(m, 'xs'), ` ${m.name}${m.id === state.me.id ? ' (ich)' : ''}${m.guest ? ' (Gast)' : ''}`);
   }));
 
   // Labels

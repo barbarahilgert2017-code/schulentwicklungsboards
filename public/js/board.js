@@ -92,6 +92,7 @@ function header() {
     h('div', { class: 'board-head-right' },
       h('button', { class: 'member-stack', title: 'Mitglieder', onclick: () => openBoardSettings(cur.data, 'members', refresh) },
         members.slice(0, 5).map((m) => avatar(m)), members.length > 5 ? h('span', { class: 'avatar avatar-sm more' }, `+${members.length - 5}`) : null),
+      isOwner() ? h('button', { class: 'btn btn-ghost', title: 'Einladungslink erstellen und teilen', onclick: () => openBoardSettings(cur.data, 'share', refresh) }, icon('share'), h('span', { class: 'hide-sm' }, ' Teilen')) : null,
       folderButton(),
       h('button', { class: 'btn btn-ghost', onclick: showActivity }, icon('activity'), h('span', { class: 'hide-sm' }, ' Aktivität')),
       menuBtn),

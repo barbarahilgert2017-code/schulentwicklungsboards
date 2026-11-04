@@ -15,10 +15,10 @@ export function parseCookies(header = '') {
   return out;
 }
 
-export function createSession(db, config, res, userId) {
+export function createSession(db, config, res, userId, { days = config.sessionDays } = {}) {
   const token = randomToken();
   const csrf = randomToken(24);
-  const expires = new Date(Date.now() + config.sessionDays * 86400_000);
+  const expires = new Date(Date.now() + days * 86400_000);
   db.prepare('INSERT INTO sessions (token_hash, user_id, csrf, expires_at) VALUES (?, ?, ?, ?)')
     .run(sha256(token), userId, csrf, expires.toISOString());
   res.cookie(SESSION_COOKIE, token, {
@@ -36,7 +36,7 @@ export function destroySession(db, config, req, res) {
 /** Lädt die Sitzung (falls vorhanden) und prüft bei schreibenden Anfragen das CSRF-Token. */
 export function sessionMiddleware(db) {
   const find = db.prepare(`
-    SELECT s.csrf, s.expires_at, u.id, u.email, u.name, u.is_admin
+    SELECT s.csrf, s.expires_at, u.id, u.email, u.name, u.is_admin, u.is_guest
     FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`);
   const del = db.prepare('DELETE FROM sessions WHERE token_hash = ?');
   let lastCleanup = 0;
@@ -53,7 +53,7 @@ export function sessionMiddleware(db) {
       const hash = sha256(token);
       const row = find.get(hash);
       if (row && row.expires_at > new Date().toISOString()) {
-        req.user = { id: row.id, email: row.email, name: row.name, isAdmin: !!row.is_admin };
+        req.user = { id: row.id, email: row.is_guest ? '' : row.email, name: row.name, isAdmin: !!row.is_admin, isGuest: !!row.is_guest };
         req.csrf = row.csrf;
       } else if (row) {
         del.run(hash);
@@ -69,6 +69,12 @@ export function sessionMiddleware(db) {
 
 export function requireUser(req, _res, next) {
   if (!req.user) return next(new HttpError(401, 'Bitte anmelden.'));
+  next();
+}
+
+/** Nur für richtige Konten, nicht für Gäste über einen Einladungslink. */
+export function noGuest(req, _res, next) {
+  if (req.user?.isGuest) return next(new HttpError(403, 'Mit einem Gastzugang ist das nicht möglich. Dafür bitte ein Konto anlegen.'));
   next();
 }
 

@@ -21,6 +21,8 @@ Diese Hinweise unterstützen Schulleitung und Datenschutzbeauftragte bei der Dok
 | Nextcloud-Verbindung | Server-Adresse, Loginname, Nextcloud-Benutzer-ID, Anzeigename, App-Passwort (verschlüsselt) | Dateiauswahl, Board-Ordner |
 | Inhalte | Boards, Listen, Karten, Beschreibungen, Checklisten, Kommentare, Termine, Zuständigkeiten, Verweise auf Dateien | Projektarbeit |
 | Einladungen | eingeladene E-Mail-Adresse, Rolle, einladende Person, Ablaufdatum, Token (gehasht) | Board-Beitritt per Link |
+| Gastzugänge (Einladungslink) | selbst gewählter Name, Sitzung (180 Tage), Board-Mitgliedschaft; keine E-Mail, kein Passwort | Mitarbeit ohne Konto |
+| Einladungslinks | Rolle, Bezeichnung, Ablaufdatum, Link (verschlüsselt gespeichert) | Zugang per Link |
 | Protokoll | wer hat wann was an Board/Karte geändert | Nachvollziehbarkeit in der Gruppe |
 
 Betroffene: Lehrkräfte und ggf. weiteres Schulpersonal. **Empfehlung:** In Boards keine personenbezogenen Daten von Schülerinnen und Schülern oder besondere Kategorien (Art. 9 DSGVO) ablegen – dafür sind die Verfahren der Schule (z. B. Schulverwaltungssoftware) vorgesehen. Auswertungs-Rohdaten (z. B. aus Befragungen) nur in entsprechend geschützten Nextcloud-Ordnern speichern.
@@ -31,6 +33,7 @@ Betroffene: Lehrkräfte und ggf. weiteres Schulpersonal. **Empfehlung:** In Boar
 - [ ] Eintrag im **Verzeichnis der Verarbeitungstätigkeiten** (Zweck: Organisation von Schulentwicklungsvorhaben; Rechtsgrundlage nach Landesschulrecht / Art. 6 Abs. 1 lit. e DSGVO bzw. Dienstvereinbarung)
 - [ ] Ggf. Beteiligung des **Personalrats** (Möglichkeit der Leistungs- und Verhaltenskontrolle durch Aktivitätsprotokoll)
 - [ ] **Löschkonzept** festlegen, z. B. abgeschlossene Boards nach Export ins Schularchiv nach X Jahren löschen; Konten ausgeschiedener Personen löschen
+- [ ] Einladungslinks nur gezielt teilen (wer den Link hat, kommt aufs Board) und nach Projektende löschen
 - [ ] Registrierung auf Schul-Domain begrenzen (`REGISTRATION_EMAIL_DOMAINS`) oder schließen
 - [ ] Für Einladungsmails den Mailserver der Schule / des Schulträgers verwenden (`SMTP_*`)
 - [ ] Nextcloud-Allowlist setzen (`NEXTCLOUD_ALLOWED_HOSTS`)

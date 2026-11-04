@@ -20,7 +20,7 @@ export default function adminRoutes({ db, config, mailer, users }) {
     res.json({
       version: VERSION,
       baseUrl: config.baseUrl,
-      counts: { users: count('users'), boards: count('boards'), cards: count('cards'), nextcloud: count('nextcloud_accounts') },
+      counts: { users: db.prepare('SELECT COUNT(*) n FROM users WHERE is_guest = 0').get().n, guests: db.prepare('SELECT COUNT(*) n FROM users WHERE is_guest = 1').get().n, boards: count('boards'), cards: count('cards'), nextcloud: count('nextcloud_accounts') },
       dbBytes,
       mail: { enabled: mailer.enabled, from: config.smtp.from || null, host: config.smtp.host || null },
       registration: { open: config.allowRegistration, domains: config.registrationDomains },
@@ -34,7 +34,7 @@ export default function adminRoutes({ db, config, mailer, users }) {
         (SELECT COUNT(*) FROM board_members m WHERE m.user_id = u.id) AS boards,
         (SELECT MAX(created_at) FROM sessions s WHERE s.user_id = u.id) AS lastLogin,
         EXISTS (SELECT 1 FROM nextcloud_accounts n WHERE n.user_id = u.id) AS nextcloud
-      FROM users u ORDER BY u.name COLLATE NOCASE`).all()
+      FROM users u WHERE u.is_guest = 0 ORDER BY u.name COLLATE NOCASE`).all()
       .map((u) => ({ ...u, isAdmin: !!u.isAdmin, nextcloud: !!u.nextcloud })));
   });
 
