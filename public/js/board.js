@@ -289,9 +289,18 @@ function cardComposer(list) {
   const wrap = h('div', { class: 'list-composer' });
   const openBtn = h('button', { class: 'composer-open', onclick: () => open() }, icon('plus'), ' Karte hinzufügen');
   const templates = cur.data.cards.filter((c) => c.isTemplate);
-  const tplBtn = templates.length ? h('button', {
+  const tplBtn = h('button', {
     class: 'composer-template', title: 'Neue Karte aus einer Vorlagenkarte',
-    onclick: (e) => popupMenu(e.currentTarget, templates.map((t) => ({
+    onclick: (e) => (!templates.length ? openModal({
+      title: 'Noch keine Vorlagenkarte',
+      content: [
+        h('p', {}, 'Vorlagenkarten sind Muster für wiederkehrende Karten, z. B. für Sitzungen – mit Beschreibung, Labels, Uhrzeit und Checklisten.'),
+        h('ol', { class: 'howto' },
+          h('li', {}, 'Eine Karte anlegen, z. B. „Vorlage: Sitzung“, und alles eintragen, was jede neue Karte haben soll.'),
+          h('li', {}, 'In der Karte unter „Aktionen“ auf „Als Vorlage markieren“ tippen.'),
+          h('li', {}, 'Danach erstellt „aus Vorlage“ hier mit einem Tipp neue Karten daraus.')),
+      ],
+    }) : popupMenu(e.currentTarget, templates.map((t) => ({
       label: t.title, icon: 'card',
       onClick: async () => {
         try {
@@ -301,8 +310,8 @@ function cardComposer(list) {
           navigate(`#/board/${cur.boardId}/card/${made.id}`);
         } catch (err) { showError(err); }
       },
-    }))),
-  }, icon('card', 14), ' aus Vorlage') : null;
+    })))),
+  }, icon('card', 14), ' aus Vorlage');
   const row = h('div', { class: 'composer-row' }, openBtn, tplBtn);
   wrap.append(row);
   function open() {
