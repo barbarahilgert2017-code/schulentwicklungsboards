@@ -64,7 +64,12 @@ export function createApp({ config, db, mailer = createMailer(config) }) {
   api.use((_req, _res, next) => next(Object.assign(new Error('Nicht gefunden.'), { status: 404 })));
   app.use('/api', api);
 
-  app.use(express.static(PUBLIC_DIR, { index: 'index.html', maxAge: config.production ? '1h' : 0 }));
+  // Browser sollen bei jedem Aufruf kurz nachfragen (ETag → meist „304 unverändert“),
+  // damit nach einem Update sofort die neue Version erscheint.
+  app.use(express.static(PUBLIC_DIR, {
+    index: 'index.html',
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }));
   app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
   // Fehlerbehandlung
