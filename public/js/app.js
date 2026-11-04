@@ -4,6 +4,7 @@ import { state, navigate } from './state.js';
 import { renderBoard, closeBoard } from './board.js';
 import { renderAccount } from './account.js';
 import { renderAdmin } from './admin.js';
+import { renderInline } from './markdown.js';
 
 const main = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -342,7 +343,7 @@ async function renderTasks() {
     h('ul', { class: 'task-list' }, list.sort(sortDue).map((t) => h('li', {},
       h('a', { href: `#/board/${t.boardId}/card/${t.cardId}`, style: { '--board-color': t.color } },
         icon(t.kind === 'card' ? 'card' : 'checklist'),
-        h('span', { class: 'task-title' }, t.title),
+        h('span', { class: 'task-title' }, renderInline(t.title, { links: false })),
         h('span', { class: 'task-meta' }, `${t.boardTitle} · ${t.sub}`),
         t.due ? h('span', { class: `due due-${dueState(t.due, false)}` }, fmtDate(t.due)) : null))))) : null);
 

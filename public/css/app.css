@@ -332,6 +332,7 @@ input[readonly] { background: var(--surface-2); }
 .attach-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 .comment-form { display: flex; gap: .5rem; align-items: flex-start; }
 .comment-form textarea { flex: 1; }
+.comment-form > .btn { align-self: flex-end; }
 .timeline { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-direction: column; gap: .75rem; }
 .tl-activity { font-size: .85rem; color: var(--muted); padding-left: 2.25rem; }
 .tl-activity strong { color: var(--text); font-weight: 600; }
@@ -439,3 +440,39 @@ input[readonly] { background: var(--surface-2); }
 .forgot-link { text-align: right; margin: -.5rem 0 .75rem; font-size: .88rem; }
 code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .88em; background: var(--surface-2); padding: .05rem .3rem; border-radius: 4px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- Markdown ---- */
+.description.md, .comment-body.md { white-space: normal; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md .md-p { margin: 0 0 .6em; }
+.md .md-h { margin: .9em 0 .35em; line-height: 1.3; }
+.md .md-h1 { font-size: 1.2rem; }
+.md .md-h2 { font-size: 1.07rem; }
+.md .md-h3 { font-size: .98rem; }
+.md .md-list { margin: 0 0 .6em; padding-left: 1.4rem; }
+.md .md-list .md-list { margin: .15em 0 .15em; }
+.md li { margin: .12em 0; }
+.md .md-task { list-style: none; margin-left: -1.2rem; }
+.md .md-task input { margin: 0 .3rem 0 0; vertical-align: -2px; }
+.md .md-quote { margin: 0 0 .6em; padding: .1em .8em; border-left: 3px solid var(--border); color: var(--muted); }
+.md .md-pre { margin: 0 0 .6em; padding: .6em .75em; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
+.md .md-pre code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .85rem; white-space: pre; }
+.md-code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .86em; background: color-mix(in srgb, var(--text) 8%, transparent); padding: .05em .3em; border-radius: 4px; }
+.md .md-hr { border: 0; border-top: 1px solid var(--border); margin: .8em 0; }
+.card-title del, .item-text del { color: var(--muted); }
+.md-preview { min-height: 160px; }
+
+.md-toolbar-wrap { margin-bottom: .35rem; }
+.md-toolbar { display: flex; flex-wrap: wrap; gap: .2rem; }
+.md-btn {
+  min-width: 2rem; height: 2rem; padding: 0 .45rem; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); border-radius: 6px; cursor: pointer; font: inherit; font-size: .88rem; display: inline-flex; align-items: center; justify-content: center;
+}
+.md-btn:hover { background: var(--surface-2); }
+.md-help-btn { margin-left: auto; color: var(--muted); }
+.md-help { margin-top: .4rem; background: var(--surface-2); border-radius: 8px; padding: .4rem .6rem; font-size: .85rem; overflow-x: auto; }
+.md-help table { border-collapse: collapse; }
+.md-help td { padding: .15rem .6rem .15rem 0; vertical-align: top; }
+.comment-input { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.comment-input textarea { width: 100%; }

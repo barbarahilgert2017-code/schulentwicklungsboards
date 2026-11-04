@@ -7,6 +7,7 @@ import { state, navigate, describeActivity } from './state.js';
 import { openCard, closeCardModal } from './card.js';
 import { openBoardSettings } from './settings.js';
 import { openFilePicker } from './filepicker.js';
+import { renderInline } from './markdown.js';
 
 const cur = {
   boardId: null,
@@ -94,7 +95,7 @@ function header() {
       folderButton(),
       h('button', { class: 'btn btn-ghost', onclick: showActivity }, icon('activity'), h('span', { class: 'hide-sm' }, ' Aktivität')),
       menuBtn),
-    b.description ? h('p', { class: 'board-desc' }, b.description) : null);
+    b.description ? h('p', { class: 'board-desc' }, renderInline(b.description)) : null);
 }
 
 function folderButton() {
@@ -259,7 +260,7 @@ function cardTile(c) {
   },
   c.labels.length ? h('div', { class: 'card-labels' }, c.labels.map((id) => labels.find((l) => l.id === id)).filter(Boolean)
     .map((l) => h('span', { class: 'card-label', style: { '--label-color': l.color }, title: l.name }, l.name))) : null,
-  h('div', { class: 'card-title' }, c.completed ? h('span', { class: 'done-mark', title: 'Erledigt' }, icon('check', 14)) : null, c.title),
+  h('div', { class: 'card-title' }, c.completed ? h('span', { class: 'done-mark', title: 'Erledigt' }, icon('check', 14)) : null, renderInline(c.title, { links: false })),
   h('div', { class: 'card-badges' },
     c.dueDate ? h('span', { class: `badge due due-${due}`, title: `Fällig am ${c.dueDate}` }, icon('clock', 13), ` ${fmtDateShort(c.dueDate)}`) : null,
     c.hasDescription ? h('span', { class: 'badge-plain', title: 'Hat Beschreibung' }, icon('text', 13)) : null,
@@ -400,7 +401,7 @@ async function showActivity() {
       title: 'Aktivität',
       content: items.length ? h('ul', { class: 'activity' }, items.map((a) => h('li', {},
         h('strong', {}, a.userName || 'Jemand'), ' ', describeActivity(a),
-        a.cardId && a.cardTitle ? [' – ', h('a', { href: `#/board/${cur.boardId}/card/${a.cardId}`, onclick: (e) => e.target.closest('.overlay')?.querySelector('.icon-btn')?.click() }, a.cardTitle)] : null,
+        a.cardId && a.cardTitle ? [' – ', h('a', { href: `#/board/${cur.boardId}/card/${a.cardId}`, onclick: (e) => e.target.closest('.overlay')?.querySelector('.icon-btn')?.click() }, renderInline(a.cardTitle, { links: false }))] : null,
         h('div', { class: 'muted small' }, fmtDateTime(a.createdAt))))) : h('p', { class: 'muted' }, 'Noch keine Aktivität.'),
     });
   } catch (err) { showError(err); }

@@ -1,11 +1,12 @@
 import { api } from './api.js';
 import {
-  h, clear, icon, toast, showError, openModal, confirmDialog, promptDialog, popupMenu, inlineEdit, linkify,
+  h, clear, icon, toast, showError, openModal, confirmDialog, promptDialog, popupMenu, inlineEdit,
   fmtDate, fmtDateTime, fmtSize, dueState, avatar,
 } from './dom.js';
 import { state, navigate, describeActivity } from './state.js';
 import { board, canEdit, refresh as refreshBoard } from './board.js';
 import { openFilePicker } from './filepicker.js';
+import { renderMarkdown, renderInline, markdownToolbar, markdownShortcuts } from './markdown.js';
 
 let modal = null;
 let cardId = null;
@@ -63,10 +64,10 @@ function draw() {
 }
 
 function titleBlock(edit) {
-  const t = h('h3', { class: `card-detail-title ${edit ? 'editable' : ''}`, tabindex: edit ? 0 : undefined }, card.title);
+  const t = h('h3', { class: `card-detail-title ${edit ? 'editable' : ''}`, tabindex: edit ? 0 : undefined }, renderInline(card.title));
   if (edit) {
     const go = () => inlineEdit(t, { value: card.title, multiline: false, onSave: act((v) => api.patch(`/cards/${card.id}`, { title: v })) });
-    t.addEventListener('click', go);
+    t.addEventListener('click', (e) => { if (!e.target.closest('a')) go(); });
     t.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
   const list = board().lists.find((l) => l.id === card.listId);
@@ -102,10 +103,10 @@ function descriptionBlock(edit) {
   const sec = h('section', { class: 'card-section' }, h('h4', {}, icon('text'), ' Beschreibung'));
   const show = () => {
     const body = card.description
-      ? h('div', { class: `description ${edit ? 'editable' : ''}`, tabindex: edit ? 0 : undefined }, linkify(card.description))
+      ? h('div', { class: `description md ${edit ? 'editable' : ''}`, tabindex: edit ? 0 : undefined }, renderMarkdown(card.description))
       : h('div', { class: 'description empty', tabindex: edit ? 0 : undefined }, edit ? 'Beschreibung hinzufügen … (Ziele, Hintergrund, Beschlusslage)' : 'Keine Beschreibung.');
     if (edit) {
-      body.addEventListener('click', (e) => { if (e.target.tagName !== 'A') editMode(); });
+      body.addEventListener('click', (e) => { if (!e.target.closest('a')) editMode(); });
       body.addEventListener('keydown', (e) => { if (e.key === 'Enter') editMode(); });
     }
     sec.replaceChildren(sec.firstChild, body);
@@ -119,10 +120,26 @@ function descriptionBlock(edit) {
       if (e.key === 'Escape') { e.preventDefault(); show(); }
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save();
     });
-    sec.replaceChildren(sec.firstChild, ta, h('div', { class: 'composer-actions' },
+    markdownShortcuts(ta);
+    const preview = h('div', { class: 'description md md-preview', hidden: true });
+    const toolbar = markdownToolbar(ta);
+    const previewBtn = h('button', {
+      class: 'btn btn-sm', 'aria-pressed': 'false',
+      onclick: () => {
+        const on = preview.hidden;
+        preview.replaceChildren(...(ta.value.trim() ? renderMarkdown(ta.value) : [h('p', { class: 'muted' }, 'Noch kein Text.')]));
+        preview.hidden = !on;
+        ta.hidden = on;
+        toolbar.hidden = on;
+        previewBtn.textContent = on ? 'Bearbeiten' : 'Vorschau';
+        previewBtn.setAttribute('aria-pressed', String(on));
+      },
+    }, 'Vorschau');
+    sec.replaceChildren(sec.firstChild, toolbar, ta, preview, h('div', { class: 'composer-actions' },
       h('button', { class: 'btn btn-primary btn-sm', onclick: save }, 'Speichern'),
       h('button', { class: 'btn btn-sm', onclick: show }, 'Abbrechen'),
-      h('span', { class: 'muted small' }, 'Strg+Enter speichert')));
+      previewBtn,
+      h('span', { class: 'muted small hide-sm' }, 'Strg+Enter speichert')));
     ta.focus();
   };
   show();
@@ -143,8 +160,8 @@ function checklistsBlock(edit) {
 
     for (const item of cl.items) {
       const assignee = members.find((m) => m.id === item.assigneeId);
-      const text = h('span', { class: `item-text ${edit ? 'editable' : ''}` }, linkify(item.text));
-      if (edit) text.addEventListener('click', (e) => { if (e.target.tagName !== 'A') inlineEdit(text, { value: item.text, maxLength: 500, onSave: act((v) => api.patch(`/checklist-items/${item.id}`, { text: v })) }); });
+      const text = h('span', { class: `item-text ${edit ? 'editable' : ''}` }, renderInline(item.text));
+      if (edit) text.addEventListener('click', (e) => { if (!e.target.closest('a')) inlineEdit(text, { value: item.text, maxLength: 500, onSave: act((v) => api.patch(`/checklist-items/${item.id}`, { text: v })) }); });
       const more = edit ? h('button', { class: 'icon-btn', 'aria-label': 'Optionen', onclick: () => itemMenu(more, item) }, icon('menu')) : null;
       const itemDue = dueState(item.dueDate, item.done);
       ul.append(h('li', { class: item.done ? 'done' : '' },
@@ -288,7 +305,8 @@ function commentsBlock() {
     await api.post(`/cards/${card.id}/comments`, { body: ta.value });
   });
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); });
-  sec.append(h('div', { class: 'comment-form' }, avatar(state.me), ta, h('button', { class: 'btn btn-primary btn-sm', onclick: send }, 'Senden')));
+  markdownShortcuts(ta);
+  sec.append(h('div', { class: 'comment-form' }, avatar(state.me), h('div', { class: 'comment-input' }, markdownToolbar(ta), ta), h('button', { class: 'btn btn-primary btn-sm', onclick: send }, 'Senden')));
 
   // Kommentare und Aktivitäten chronologisch mischen
   const entries = [
@@ -302,7 +320,7 @@ function commentsBlock() {
     }
     const c = e.c;
     const mine = c.userId === state.me.id;
-    const bodyEl = h('div', { class: 'comment-body' }, linkify(c.body));
+    const bodyEl = h('div', { class: 'comment-body md' }, renderMarkdown(c.body));
     return h('li', { class: 'tl-comment' },
       avatar({ name: c.userName || '?' }),
       h('div', { class: 'comment' },

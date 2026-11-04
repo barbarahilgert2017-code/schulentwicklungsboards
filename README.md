@@ -7,6 +7,7 @@ Ein schlankes, selbst gehostetes Kanban-Werkzeug (Trello-ähnlich) für **Schule
 **Boards, Listen, Karten**
 - Boards mit frei benennbaren Listen; Karten per Drag & Drop verschieben (Karten und Listen) – auf Tablets alternativ über „Verschieben“ im Karten-Dialog
 - Karten mit Beschreibung, Labels, Zuständigen, Start- und Fälligkeitsdatum, Erledigt-Status, Kommentaren, Anhängen und Verlauf
+- **Markdown** in Beschreibungen, Kommentaren, Checklisten und Kartentiteln (`**fett**`, `*kursiv*`, Listen, Überschriften, Links …) mit Formatierungsleiste, Vorschau und Strg+B / Strg+I – sicher gerendert ohne HTML
 - **Checklisten** mit Fortschrittsbalken; Punkte können einer Person und einem Termin zugeordnet und in eigene Karten umgewandelt werden
 - Filter nach Text, Label, „Mir zugewiesen“ und Fälligkeit; Archiv für Karten und Listen
 - **Meine Aufgaben**: alle mir zugewiesenen Karten und Checklistenpunkte über alle Boards, gruppiert nach Dringlichkeit
