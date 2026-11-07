@@ -50,5 +50,6 @@ export function client(base) {
       return r.data.user;
     },
     setCsrf(v) { csrf = v; },
+    cookie() { return cookie; },
   };
 }

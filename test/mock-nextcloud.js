@@ -1,6 +1,8 @@
 // Minimaler Nextcloud-Nachbau für Tests: Login Flow v2, OCS, WebDAV (In-Memory).
 import http from 'node:http';
 
+const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+
 export async function startMockNextcloud() {
   const state = {
     approved: null, // { loginName, appPassword, userId }
@@ -49,6 +51,16 @@ export async function startMockNextcloud() {
     if (!login) { res.writeHead(401); return res.end(); }
     const userId = state.users[login];
 
+    if (p === '/index.php/core/preview' && req.method === 'GET') {
+      state.previews = (state.previews || 0) + 1;
+      const fid = url.searchParams.get('fileId');
+      const f = [...state.files.entries()].find(([k, v]) => k.startsWith(`${userId}:`) && String(v.id) === fid)?.[1];
+      if (!f || !String(f.mime).startsWith('image/')) { res.writeHead(404); return res.end(); }
+      // Echte Bilddaten durchreichen, sonst ein 1×1-PNG als Vorschau
+      const real = /^image\/(png|jpeg)$/.test(f.mime) && f.content?.length > 100;
+      res.writeHead(200, { 'Content-Type': real ? f.mime : 'image/png' });
+      return res.end(real ? f.content : TINY_PNG);
+    }
     if (p === '/ocs/v2.php/cloud/user') return json(res, 200, { ocs: { data: { id: userId, 'display-name': userId.toUpperCase() } } });
     if (p === '/ocs/v2.php/core/apppassword' && req.method === 'DELETE') { state.revoked.push(login); return json(res, 200, { ocs: {} }); }
     if (p === '/ocs/v2.php/apps/files_sharing/api/v1/shares' && req.method === 'POST') {
@@ -80,6 +92,12 @@ export async function startMockNextcloud() {
       state.files.set(key, { dir: true, id: state.nextId++ });
       res.writeHead(201); return res.end();
     }
+    if (req.method === 'GET') {
+      const f = state.files.get(key);
+      if (!f || f.dir) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': f.mime || 'application/octet-stream' });
+      return res.end(f.content);
+    }
     if (req.method === 'PUT') {
       const body = await readBody(req);
       if (!state.files.get(`${userId}:${parent(fp)}`)) { res.writeHead(409); return res.end(); }
@@ -96,7 +114,7 @@ export async function startMockNextcloud() {
     state,
     approve(loginName, appPassword = `pw-${loginName}-${Date.now()}`) { state.approved = { loginName, appPassword }; },
     addFile(userId, path, content = 'x', mime = 'text/plain') {
-      state.files.set(`${userId}:${path}`, { dir: false, id: state.nextId++, size: content.length, mime, content: Buffer.from(content) });
+      state.files.set(`${userId}:${path}`, { dir: false, id: state.nextId++, size: content.length, mime, content: Buffer.isBuffer(content) ? content : Buffer.from(content) });
     },
     addDir(userId, path) { state.files.set(`${userId}:${path}`, { dir: true, id: state.nextId++ }); },
     close: () => new Promise((r) => server.close(r)),

@@ -322,6 +322,31 @@ export class NextcloudClient {
     return this.stat(p);
   }
 
+  /**
+   * Bild für die Anzeige holen: zuerst die verkleinerte Vorschau der Nextcloud,
+   * sonst die Datei selbst (bis maxBytes). Gibt { buf, type } zurück.
+   */
+  async image(fileId, path, { width = 800, height = 450, maxBytes = 8 * 1024 * 1024 } = {}) {
+    const read = async (res) => {
+      const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      const len = Number(res.headers.get('content-length') || 0);
+      if (len > maxBytes) throw new NextcloudError('Bild zu groß.', 413);
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxBytes) throw new NextcloudError('Bild zu groß.', 413);
+      return { buf, type };
+    };
+    if (fileId) {
+      const q = new URLSearchParams({ fileId: String(fileId), x: String(width), y: String(height), a: '1', forceIcon: '0' });
+      try {
+        const res = await ncFetch(`${this.serverUrl}/index.php/core/preview?${q}`, { headers: this.headers({ Accept: 'image/*' }) });
+        if (res.ok) return await read(res);
+      } catch (err) { if (err.status === 413) throw err; /* sonst: Datei direkt versuchen */ }
+    }
+    const res = await ncFetch(this.davUrl(path), { headers: this.headers() });
+    await this.check(res, 'Bild laden');
+    return read(res);
+  }
+
   /** Teilt einen Ordner mit einer Nextcloud-Nutzerin / einem Nutzer (Freigabetyp 0). */
   async shareWithUser(p, shareWith, permissions = 31) {
     const res = await ncFetch(`${this.serverUrl}/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json`, {

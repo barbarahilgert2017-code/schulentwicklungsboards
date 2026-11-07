@@ -58,7 +58,7 @@ function draw() {
   const scroll = modal.body.scrollTop;
   const edit = canEdit();
   modal.setTitle(board().board.title);
-  clear(modal.body).append(h('div', { class: 'card-detail' },
+  clear(modal.body).append(coverHeader(edit), h('div', { class: 'card-detail' },
     h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), linksBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
     h('aside', { class: 'card-side' }, sidebar(edit))));
   modal.body.scrollTop = scroll;
@@ -74,6 +74,26 @@ function titleBlock(edit) {
   const list = board().lists.find((l) => l.id === card.listId);
   return h('div', {}, t, h('p', { class: 'muted small' }, 'in Liste ', h('strong', {}, list?.title || '–'),
     card.creator ? ` · angelegt von ${card.creator} am ${fmtDateTime(card.createdAt)}` : ''));
+}
+
+// ---------------- Titelbild ----------------
+
+const isImageAtt = (a) => a.kind === 'nextcloud' && (/^image\/(jpeg|pjpeg|png|gif|webp|heic|heif)$/i.test(a.mime || '') || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(a.name || ''));
+
+function coverHeader(edit) {
+  if (!card.coverId) return null;
+  const att = card.attachmentList.find((a) => a.id === card.coverId);
+  const wrap = h('div', { class: 'card-cover-header' },
+    h('a', { href: att?.url || '#', target: '_blank', rel: 'noopener noreferrer', title: 'Bild in der Nextcloud öffnen' },
+      h('img', {
+        src: `/api/attachments/${card.coverId}/cover`, alt: att ? `Titelbild: ${att.name}` : 'Titelbild',
+        onerror: () => wrap.replaceChildren(h('p', { class: 'muted small cover-missing' }, 'Das Titelbild kann gerade nicht geladen werden (z. B. Format nicht unterstützt oder Nextcloud nicht erreichbar).')),
+      })),
+    edit ? h('button', {
+      class: 'btn btn-sm cover-remove', title: 'Das Bild bleibt als Anhang erhalten',
+      onclick: act(() => api.patch(`/cards/${card.id}`, { coverAttachmentId: null })),
+    }, 'Titelbild entfernen') : null);
+  return wrap;
 }
 
 // ---------------- Verknüpfte Karten ----------------
@@ -385,6 +405,9 @@ function attachmentsBlock(edit) {
             a.kind === 'nextcloud' ? `Nextcloud${a.path ? ` · ${a.path}` : ''}` : new URL(a.url).hostname,
             a.size ? ` · ${fmtSize(a.size)}` : '', a.addedBy ? ` · ${a.addedBy}` : '')),
         icon('external', 14)),
+      edit && isImageAtt(a) ? (a.id === card.coverId
+        ? h('span', { class: 'badge cover-badge', title: 'Wird oben in der Karte und auf der Kachel angezeigt' }, 'Titelbild')
+        : h('button', { class: 'btn btn-sm', title: 'Oben in der Karte und auf der Kachel anzeigen', onclick: act(() => api.patch(`/cards/${card.id}`, { coverAttachmentId: a.id })) }, 'Als Titelbild')) : null,
       edit ? h('button', { class: 'icon-btn', 'aria-label': `Anhang ${a.name} entfernen`, title: 'Verknüpfung entfernen (Datei bleibt in Nextcloud)', onclick: async () => {
         if (await confirmDialog(`Anhang „${a.name}“ von der Karte entfernen? ${a.kind === 'nextcloud' ? 'Die Datei bleibt in der Nextcloud erhalten.' : ''}`, { ok: 'Entfernen' })) act(() => api.del(`/attachments/${a.id}`))();
       } }, icon('x')) : null))));

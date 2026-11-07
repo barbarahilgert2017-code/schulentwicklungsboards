@@ -221,6 +221,10 @@ const MIGRATIONS = [
   );
   CREATE INDEX card_links_b ON card_links(card_b);
   `,
+  // 7: Titelbild einer Karte (ein Bild-Anhang)
+  `
+  ALTER TABLE cards ADD COLUMN cover_attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL;
+  `,
 ];
 
 export function openDb(file) {

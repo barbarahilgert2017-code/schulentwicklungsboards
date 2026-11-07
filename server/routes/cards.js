@@ -103,10 +103,16 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       start_time: time(req.body.startTime, 'Startzeit'),
       due_time: time(req.body.dueTime, 'Uhrzeit'),
       is_template: bool(req.body.isTemplate),
+      cover_attachment_id: req.body.coverAttachmentId === undefined ? undefined
+        : req.body.coverAttachmentId === null ? null : int(req.body.coverAttachmentId, 'Titelbild'),
       completed: bool(req.body.completed),
       archived: bool(req.body.archived),
     };
     // Ohne Datum keine Uhrzeit
+    if (fields.cover_attachment_id) {
+      const a = db.prepare('SELECT card_id, kind, mime, name FROM attachments WHERE id = ?').get(fields.cover_attachment_id);
+      if (!a || a.card_id !== id || a.kind !== 'nextcloud' || !isImage(a.mime, a.name)) throw bad('Als Titelbild eignen sich nur Bilder, die an dieser Karte hängen.');
+    }
     // Datum entfernen löscht die Uhrzeit (außer bei Vorlagen: dort zählt nur die Uhrzeit)
     const isTpl = (fields.is_template ?? before.is_template) === 1;
     if (fields.start_date === null && !isTpl) fields.start_time = null;
@@ -361,10 +367,70 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       cardId, 'nextcloud', entry.name, client.fileLink(entry.fileId) || `${client.serverUrl}/index.php/apps/files/?dir=${encodeURIComponent(entry.path)}`,
       client.serverUrl, entry.path, entry.fileId || null, entry.isDir ? 'httpd/unix-directory' : entry.mime || null, entry.size || null, userId,
     );
+    const attId = Number(lastInsertRowid);
+    // Erstes Bild wird automatisch zum Titelbild
+    if (!entry.isDir && isImage(entry.mime, entry.name)) {
+      db.prepare('UPDATE cards SET cover_attachment_id = ? WHERE id = ? AND cover_attachment_id IS NULL').run(attId, cardId);
+    }
     svc.log(boardId, cardId, userId, 'attachment.added', { name: entry.name });
     svc.touchBoard(boardId);
-    return Number(lastInsertRowid);
+    return attId;
   }
+
+  // ---------------- Titelbild ----------------
+  const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const isImage = (mime, name = '') => /^image\/(jpeg|pjpeg|png|gif|webp|heic|heif)$/i.test(mime || '')
+    || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(name);
+  const coverCache = new Map(); // attachmentId → { buf, type, at }
+  const COVER_TTL = 60 * 60_000;
+  let coverBytes = 0;
+  function cacheCover(id, entry) {
+    coverCache.delete(id);
+    coverCache.set(id, entry);
+    coverBytes += entry.buf.length;
+    while (coverBytes > 30 * 1024 * 1024 || coverCache.size > 200) {
+      const [k, v] = coverCache.entries().next().value;
+      coverCache.delete(k);
+      coverBytes -= v.buf.length;
+    }
+  }
+
+  /** Nextcloud-Zugänge, über die ein Anhang lesbar sein kann: Board-Ordner zuerst, dann wer ihn angehängt hat. */
+  function clientsForAttachment(att, boardId) {
+    const out = [];
+    try {
+      const f = nc.folderClient(boardId);
+      if (f.client.serverUrl === att.nc_server && isInside(f.root, att.nc_path || '/')) out.push(f.client);
+    } catch { /* kein Board-Ordner */ }
+    const own = nc.clientFor(att.added_by, { required: false });
+    if (own && own.serverUrl === att.nc_server) out.push(own);
+    return out;
+  }
+
+  r.get('/attachments/:id/cover', async (req, res) => {
+    const { boardId } = access.via('attachment', req.user, req.params.id);
+    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get(int(req.params.id));
+    if (att.kind !== 'nextcloud' || !isImage(att.mime, att.name)) throw new HttpError(415, 'Kein Bild.');
+    let entry = coverCache.get(att.id);
+    if (!entry || Date.now() - entry.at > COVER_TTL) {
+      entry = null;
+      let lastErr = null;
+      for (const client of clientsForAttachment(att, boardId)) {
+        try {
+          const img = await client.image(att.nc_file_id, att.nc_path);
+          if (IMAGE_TYPES.includes(img.type)) { entry = { ...img, at: Date.now() }; break; }
+          lastErr = new HttpError(415, 'Dieses Bildformat kann nicht angezeigt werden.');
+        } catch (err) { lastErr = err; }
+      }
+      if (!entry) throw lastErr || new HttpError(404, 'Bild nicht erreichbar.');
+      cacheCover(att.id, entry);
+    }
+    res.setHeader('Content-Type', entry.type);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.end(entry.buf);
+  });
 
   // Weblink anhängen
   r.post('/cards/:id/attachments/link', (req, res) => {

@@ -138,7 +138,8 @@ export function createBoardService(db) {
              (SELECT COUNT(*) FROM checklist_items i JOIN checklists cl ON cl.id = i.checklist_id WHERE cl.card_id = c.id AND i.done = 1) AS items_done,
              (SELECT COUNT(*) FROM attachments a WHERE a.card_id = c.id) AS attachments,
              (SELECT COUNT(*) FROM comments co WHERE co.card_id = c.id) AS comments,
-             (SELECT COUNT(*) FROM card_links k WHERE k.card_a = c.id OR k.card_b = c.id) AS links
+             (SELECT COUNT(*) FROM card_links k WHERE k.card_a = c.id OR k.card_b = c.id) AS links,
+             c.cover_attachment_id AS cover_id
       FROM cards c WHERE ${where} ORDER BY c.position, c.id`).all(...params);
     if (!cards.length) return [];
     const ids = cards.map((c) => c.id);
@@ -157,6 +158,7 @@ export function createBoardService(db) {
       startTime: c.start_time, dueTime: c.due_time, isTemplate: !!c.is_template,
       completed: !!c.completed, archived: !!c.archived, hasDescription: !!c.has_desc,
       checklist: { done: c.items_done, total: c.items_total }, attachments: c.attachments, comments: c.comments, links: c.links,
+      coverId: c.cover_id || null,
       labels: lab.get(c.id) || [], members: mem.get(c.id) || [],
     }));
   }

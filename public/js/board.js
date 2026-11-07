@@ -260,6 +260,10 @@ function cardTile(c) {
     class: `card-tile ${c.completed ? 'completed' : ''} ${c.isTemplate ? 'card-template' : ''}`, href: `#/board/${cur.boardId}/card/${c.id}`,
     draggable: canEdit() ? 'true' : undefined, dataset: { id: c.id },
   },
+  c.coverId ? h('img', {
+    class: 'card-cover', src: `/api/attachments/${c.coverId}/cover`, alt: '', loading: 'lazy', draggable: 'false',
+    onerror: (e) => e.target.remove(),
+  }) : null,
   c.labels.length ? h('div', { class: 'card-labels' }, c.labels.map((id) => labels.find((l) => l.id === id)).filter(Boolean)
     .map((l) => h('span', { class: 'card-label', style: { '--label-color': l.color }, title: l.name }, l.name))) : null,
   c.isTemplate ? h('div', { class: 'template-badge' }, icon('card', 12), ' Vorlage') : null,
