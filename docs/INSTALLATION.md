@@ -145,5 +145,5 @@ Alle Befehle auf dem Server, immer mit `sudo`:
 | Adresse lädt nicht | 2–3 Minuten warten (Zertifikat). Dann `sudo seb status` und `sudo seb logs`. |
 | Eigene Adresse: Zertifikatsfehler | Zeigt der A-Eintrag wirklich auf die Server-IP? Prüfen auf dnschecker.org |
 | Einrichtungscode verloren | `sudo seb code` |
-| Test-E-Mail kommt nicht an | SMTP-Daten prüfen, Spam-Ordner ansehen, `sudo seb logs` zeigt die Fehlermeldung |
+| Test-E-Mail kommt nicht an | `sudo seb mailtest` zeigt, ob Verbindung und Anmeldung beim Mailserver klappen; Spam-Ordner ansehen; Port 587 statt 465 verwenden |
 | Nextcloud-Verbindung scheitert | Steht die Nextcloud-Adresse richtig in `NEXTCLOUD_ALLOWED_HOSTS`? |

@@ -75,6 +75,10 @@ case "${1:-hilfe}" in
   admin)         [ -n "${2:-}" ] || { echo "Aufruf: sudo seb admin name@schule.de"; exit 1; }
                  dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js make-admin "$2";;
   konten)        dc exec -T app node --disable-warning=ExperimentalWarning server/cli.js list-users;;
+  mailtest)
+    echo "Einstellungen in .env:"; grep -E '^(SMTP_HOST|SMTP_PORT|SMTP_SECURE|SMTP_USER|MAIL_FROM)=' .env || true
+    dc exec -T app node -e "const e=process.env;console.log('In der App aktiv:',e.SMTP_HOST||'(leer)','| Port',e.SMTP_PORT,'| Passwort gesetzt:',Boolean(e.SMTP_PASS));require('nodemailer').createTransport({host:e.SMTP_HOST,port:Number(e.SMTP_PORT),secure:e.SMTP_SECURE==='true',auth:{user:e.SMTP_USER,pass:e.SMTP_PASS},connectionTimeout:15000}).verify().then(()=>console.log('SMTP OK - Verbindung und Anmeldung funktionieren')).catch((x)=>console.log('SMTP-FEHLER:',x.message))"
+    ;;
   *) cat <<HILFE
 Schulentwicklungsboards – Verwaltung (immer mit sudo):
   seb status              Läuft alles? Adresse, Version, Update-Einstellung
@@ -89,6 +93,7 @@ Schulentwicklungsboards – Verwaltung (immer mit sudo):
   seb passwort MAIL       Neues Zufallspasswort für ein Konto setzen
   seb admin MAIL          Konto zur Administration machen
   seb konten              Alle Konten auflisten
+  seb mailtest            E-Mail-Versand prüfen (Verbindung und Anmeldung beim Mailserver)
 HILFE
   ;;
 esac
