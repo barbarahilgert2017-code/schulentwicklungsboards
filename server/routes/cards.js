@@ -25,9 +25,70 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
     res.status(201).json(svc.cardSummaries('c.id = ?', id)[0]);
   });
 
+  /** Verknüpfte Karten – nur aus Boards, in denen die Person Mitglied ist. */
+  function linkedCards(cardId, userId) {
+    return db.prepare(`
+      SELECT c.id, c.title, c.board_id AS boardId, b.title AS boardTitle, b.color AS boardColor, l.title AS listTitle,
+             c.completed, c.archived, c.is_template AS isTemplate, c.due_date AS dueDate, c.due_time AS dueTime
+      FROM card_links k
+      JOIN cards c ON c.id = CASE WHEN k.card_a = ? THEN k.card_b ELSE k.card_a END
+      JOIN boards b ON b.id = c.board_id JOIN lists l ON l.id = c.list_id
+      JOIN board_members m ON m.board_id = c.board_id AND m.user_id = ?
+      WHERE k.card_a = ? OR k.card_b = ?
+      ORDER BY b.title, c.title`).all(cardId, userId, cardId, cardId)
+      .map((x) => ({ ...x, completed: !!x.completed, archived: !!x.archived, isTemplate: !!x.isTemplate }));
+  }
+
   r.get('/cards/:id', (req, res) => {
     const { role } = access.via('card', req.user, req.params.id);
-    res.json({ ...svc.fullCard(int(req.params.id)), role });
+    const id = int(req.params.id);
+    res.json({ ...svc.fullCard(id), role, linkedCards: linkedCards(id, req.user.id) });
+  });
+
+  // ---- Verknüpfungen ----
+  r.post('/cards/:id/links', (req, res) => {
+    const { boardId } = access.via('card', req.user, req.params.id, 'editor');
+    const id = int(req.params.id);
+    const targetId = int(req.body.cardId, 'Karte');
+    if (targetId === id) throw bad('Eine Karte kann nicht mit sich selbst verknüpft werden.');
+    const target = access.via('card', req.user, targetId); // Zielboard muss sichtbar sein
+    const [a, b] = id < targetId ? [id, targetId] : [targetId, id];
+    const added = db.prepare('INSERT OR IGNORE INTO card_links (card_a, card_b, created_by) VALUES (?, ?, ?)').run(a, b, req.user.id).changes;
+    if (added) {
+      const t = cardRow(targetId);
+      const src = cardRow(id);
+      svc.log(boardId, id, req.user.id, 'card.linked', { title: t.title });
+      svc.log(target.boardId, targetId, req.user.id, 'card.linked', { title: src.title });
+    }
+    res.status(added ? 201 : 200).json({ linkedCards: linkedCards(id, req.user.id) });
+  });
+
+  r.delete('/cards/:id/links/:targetId', (req, res) => {
+    const { boardId } = access.via('card', req.user, req.params.id, 'editor');
+    const id = int(req.params.id);
+    const targetId = int(req.params.targetId);
+    const [a, b] = id < targetId ? [id, targetId] : [targetId, id];
+    if (db.prepare('DELETE FROM card_links WHERE card_a = ? AND card_b = ?').run(a, b).changes) {
+      svc.log(boardId, id, req.user.id, 'card.unlinked', { title: cardRow(targetId)?.title });
+    }
+    res.json({ linkedCards: linkedCards(id, req.user.id) });
+  });
+
+  // Karten zum Verknüpfen suchen – in allen Boards der Person
+  r.get('/cards/:id/link-candidates', (req, res) => {
+    const { boardId } = access.via('card', req.user, req.params.id, 'editor');
+    const id = int(req.params.id);
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+    const rows = db.prepare(`
+      SELECT c.id, c.title, c.board_id AS boardId, b.title AS boardTitle, b.color AS boardColor, l.title AS listTitle, c.completed
+      FROM cards c JOIN boards b ON b.id = c.board_id JOIN lists l ON l.id = c.list_id
+      JOIN board_members m ON m.board_id = c.board_id AND m.user_id = ?
+      WHERE c.id != ? AND c.archived = 0 AND l.archived = 0 AND b.archived = 0
+        AND (? = '' OR lower(c.title) LIKE ? ESCAPE '\\')
+        AND NOT EXISTS (SELECT 1 FROM card_links k WHERE (k.card_a = c.id AND k.card_b = ?) OR (k.card_b = c.id AND k.card_a = ?))
+      ORDER BY (c.board_id = ?) DESC, c.updated_at DESC
+      LIMIT 30`).all(req.user.id, id, q, `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`, id, id, boardId);
+    res.json(rows.map((x) => ({ ...x, completed: !!x.completed, sameBoard: x.boardId === boardId })));
   });
 
   r.patch('/cards/:id', (req, res) => {

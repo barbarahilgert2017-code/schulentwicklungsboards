@@ -59,7 +59,7 @@ function draw() {
   const edit = canEdit();
   modal.setTitle(board().board.title);
   clear(modal.body).append(h('div', { class: 'card-detail' },
-    h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
+    h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), linksBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
     h('aside', { class: 'card-side' }, sidebar(edit))));
   modal.body.scrollTop = scroll;
 }
@@ -74,6 +74,87 @@ function titleBlock(edit) {
   const list = board().lists.find((l) => l.id === card.listId);
   return h('div', {}, t, h('p', { class: 'muted small' }, 'in Liste ', h('strong', {}, list?.title || '–'),
     card.creator ? ` · angelegt von ${card.creator} am ${fmtDateTime(card.createdAt)}` : ''));
+}
+
+// ---------------- Verknüpfte Karten ----------------
+
+const cardHref = (boardId, id) => `#/board/${boardId}/card/${id}`;
+
+async function copyCardLink() {
+  const link = `${location.origin}/${cardHref(card.boardId, card.id)}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Link zur Karte kopiert – z. B. in eine Beschreibung oder einen Kommentar einfügen.', 'success');
+  } catch {
+    const input = h('input', { type: 'text', value: link, readOnly: true, 'aria-label': 'Link zur Karte', onfocus: (e) => e.target.select() });
+    openModal({ title: 'Link zur Karte', content: [h('p', { class: 'hint' }, 'Link markieren und kopieren:'), input] });
+  }
+}
+
+function linksBlock(edit) {
+  const links = card.linkedCards || [];
+  if (!links.length && !edit) return null;
+  const sec = h('section', { class: 'card-section' }, h('h4', {}, icon('link'), ' Verknüpfte Karten'));
+  if (links.length) {
+    sec.append(h('ul', { class: 'linked-cards' }, links.map((l) => {
+      const due = l.isTemplate ? null : dueState(l.dueDate, l.completed, l.dueTime);
+      return h('li', {},
+        h('a', { class: 'linked-card', href: cardHref(l.boardId, l.id), style: { '--board-color': l.boardColor } },
+          h('span', { class: 'linked-title' }, l.completed ? h('span', { class: 'done-mark' }, icon('check', 13)) : null, renderInline(l.title, { links: false })),
+          h('span', { class: 'muted small' },
+            l.boardId !== card.boardId ? `${l.boardTitle} · ` : '', l.listTitle,
+            l.isTemplate ? ' · Vorlage' : '', l.archived ? ' · archiviert' : ''),
+          l.dueDate && due ? h('span', { class: `badge due due-${due}` }, fmtWhen(l.dueDate, l.dueTime)) : null),
+        edit ? h('button', {
+          class: 'icon-btn', 'aria-label': `Verknüpfung mit „${l.title}“ lösen`, title: 'Verknüpfung lösen (die Karte bleibt erhalten)',
+          onclick: act(() => api.del(`/cards/${card.id}/links/${l.id}`)),
+        }, icon('x')) : null);
+    })));
+  } else {
+    sec.append(h('p', { class: 'muted small' }, 'Noch keine verknüpften Karten.'));
+  }
+  if (edit) sec.append(h('button', { class: 'btn btn-sm', onclick: linkPicker }, icon('plus'), ' Karte verknüpfen'));
+  return sec;
+}
+
+function linkPicker() {
+  const search = h('input', { type: 'search', placeholder: 'Titel der Karte suchen …', autofocus: true, 'aria-label': 'Karte suchen' });
+  const results = h('ul', { class: 'link-results' });
+  const m = openModal({
+    title: 'Karte verknüpfen',
+    content: [search, h('p', { class: 'hint' }, 'Gesucht wird in allen Boards, in denen du Mitglied bist. Die Verknüpfung gilt in beide Richtungen.'), results],
+  });
+  let timer = null;
+  let seq = 0;
+  const load = async () => {
+    const mine = ++seq;
+    try {
+      const list = await api.get(`/cards/${card.id}/link-candidates?q=${encodeURIComponent(search.value)}`);
+      if (mine !== seq) return; // veraltete Antwort
+      clear(results);
+      if (!list.length) { results.append(h('li', { class: 'muted small' }, search.value ? 'Keine passende Karte gefunden.' : 'Keine weiteren Karten vorhanden.')); return; }
+      let lastBoard = null;
+      for (const c of list) {
+        if (c.boardId !== lastBoard) {
+          lastBoard = c.boardId;
+          results.append(h('li', { class: 'link-group' }, c.sameBoard ? 'Dieses Board' : c.boardTitle));
+        }
+        results.append(h('li', {}, h('button', {
+          class: 'link-result',
+          onclick: async () => {
+            try {
+              await api.post(`/cards/${card.id}/links`, { cardId: c.id });
+              m.close();
+              toast('Karten verknüpft.', 'success');
+              await reload();
+            } catch (err) { showError(err); }
+          },
+        }, h('span', {}, renderInline(c.title, { links: false })), h('span', { class: 'muted small' }, c.listTitle))));
+      }
+    } catch (err) { clear(results).append(h('li', { class: 'form-error' }, err.message)); }
+  };
+  search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 200); });
+  load();
 }
 
 /** Hinweis bei Vorlagenkarten + direkt eine Karte daraus erstellen. */
@@ -471,6 +552,7 @@ function sidebar(edit) {
     }) }, icon('move'), ' Verschieben')),
     section('Aktionen',
       h('button', { class: 'btn btn-sm btn-block', onclick: () => copyDialog(false) }, icon('card'), ' Kopieren'),
+      h('button', { class: 'btn btn-sm btn-block', onclick: copyCardLink }, icon('link'), ' Link zur Karte kopieren'),
       h('button', {
         class: 'btn btn-sm btn-block', title: 'Vorlagenkarten zählen nicht als Aufgaben und lassen sich als Ausgangspunkt für neue Karten nutzen.',
         onclick: act(async () => {

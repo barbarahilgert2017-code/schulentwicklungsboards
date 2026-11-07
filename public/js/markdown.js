@@ -14,6 +14,11 @@ import { h, icon } from './dom.js';
 // ---------------- Inline ----------------
 
 const SAFE_URL = /^(https?:\/\/|mailto:)/i;
+/** Links in die eigene App (z. B. auf eine Karte) im selben Tab öffnen, andere in einem neuen. */
+const linkAttrs = (href) => {
+  try { if (new URL(href, location.href).origin === location.origin) return { href }; } catch { /* ignorieren */ }
+  return { href, target: '_blank', rel: 'noopener noreferrer' };
+};
 const INLINE = [
   { type: 'code', re: /`([^`\n]+)`/ },
   { type: 'escape', re: /\\([\\`*_{}[\]()#+\-.!~>|])/ },
@@ -59,14 +64,14 @@ export function renderInline(text, opts = {}, depth = 0) {
       case 'escape': out.push(m[1]); break;
       case 'link':
         if (!links) out.push(...inner(m[1]));
-        else if (SAFE_URL.test(m[2])) out.push(h('a', { href: m[2], target: '_blank', rel: 'noopener noreferrer' }, inner(m[1])));
+        else if (SAFE_URL.test(m[2])) out.push(h('a', linkAttrs(m[2]), inner(m[1])));
         else out.push(m[0]);
         break;
       case 'url': {
         const url = m[0].replace(/[.,;:!?)\]]+$/, '');
         consumed = url.length;
         if (!links) { out.push(url); break; }
-        out.push(h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, url));
+        out.push(h('a', linkAttrs(url), url));
         break;
       }
       case 'bold': out.push(h('strong', {}, inner(m[1]))); break;

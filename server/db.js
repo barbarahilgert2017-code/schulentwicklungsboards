@@ -209,6 +209,18 @@ const MIGRATIONS = [
   ALTER TABLE cards ADD COLUMN due_time TEXT;
   ALTER TABLE cards ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0;
   `,
+  // 6: Verknüpfte Karten (ungerichtet, card_a < card_b)
+  `
+  CREATE TABLE card_links (
+    card_a INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    card_b INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (card_a, card_b),
+    CHECK (card_a < card_b)
+  );
+  CREATE INDEX card_links_b ON card_links(card_b);
+  `,
 ];
 
 export function openDb(file) {

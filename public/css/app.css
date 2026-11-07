@@ -519,3 +519,14 @@ code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; 
 .date-time { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(5.6rem, 1fr); gap: .3rem; }
 .date-time input { min-width: 0; padding-left: .4rem; padding-right: .3rem; }
 .howto { padding-left: 1.3rem; display: flex; flex-direction: column; gap: .4rem; }
+
+/* ---- Verknüpfte Karten ---- */
+.linked-cards { list-style: none; padding: 0; margin: 0 0 .6rem; display: flex; flex-direction: column; gap: .35rem; }
+.linked-cards li { display: flex; align-items: center; gap: .3rem; }
+.linked-card { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; padding: .45rem .65rem; border-radius: 8px; background: var(--surface-2); color: var(--text); text-decoration: none; border-left: 4px solid var(--board-color, var(--border)); }
+.linked-card:hover { background: color-mix(in srgb, var(--primary) 10%, var(--surface-2)); }
+.linked-title { font-weight: 600; overflow-wrap: anywhere; }
+.link-results { list-style: none; padding: 0; margin: .5rem 0 0; max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: .2rem; }
+.link-group { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: .5rem; }
+.link-result { width: 100%; display: flex; justify-content: space-between; gap: .75rem; align-items: center; text-align: left; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: .45rem .6rem; cursor: pointer; font: inherit; }
+.link-result:hover { background: var(--surface-2); }
