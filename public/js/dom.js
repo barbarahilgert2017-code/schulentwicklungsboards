@@ -64,6 +64,8 @@ const ICONS = {
   move: 'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20',
   arrowLeft: 'M19 12H5M12 19l-7-7 7-7',
   arrowRight: 'M5 12h14M12 5l7 7-7 7',
+  arrowUp: 'M12 19V5M5 12l7-7 7 7',
+  arrowDown: 'M12 5v14M19 12l-7 7-7-7',
   card: 'M3 5h18v14H3zM3 10h18',
 };
 

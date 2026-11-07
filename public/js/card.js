@@ -315,23 +315,27 @@ function checklistsBlock(edit) {
     const title = h('h4', { class: edit ? 'editable' : '' }, icon('checklist'), ` ${cl.title}`);
     if (edit) title.addEventListener('click', () => inlineEdit(title, { value: cl.title, onSave: act((v) => api.patch(`/checklists/${cl.id}`, { title: v })) }));
     const hideDone = h('input', { type: 'checkbox' });
-    const ul = h('ul', { class: 'checklist' });
+    const ul = h('ul', { class: 'checklist', dataset: { checklistId: cl.id } });
     hideDone.addEventListener('change', () => ul.classList.toggle('hide-done', hideDone.checked));
+    if (edit) enableItemDrop(ul, cl.id);
 
-    for (const item of cl.items) {
+    cl.items.forEach((item, index) => {
       const assignee = members.find((m) => m.id === item.assigneeId);
       const text = h('span', { class: `item-text ${edit ? 'editable' : ''}` }, renderInline(item.text));
       if (edit) text.addEventListener('click', (e) => { if (!e.target.closest('a')) inlineEdit(text, { value: item.text, maxLength: 500, onSave: act((v) => api.patch(`/checklist-items/${item.id}`, { text: v })) }); });
-      const more = edit ? h('button', { class: 'icon-btn', 'aria-label': 'Optionen', onclick: () => itemMenu(more, item) }, icon('menu')) : null;
+      const more = edit ? h('button', { class: 'icon-btn', 'aria-label': 'Optionen', onclick: () => itemMenu(more, item, cl, index) }, icon('menu')) : null;
       const itemDue = dueState(item.dueDate, item.done);
-      ul.append(h('li', { class: item.done ? 'done' : '' },
+      const li = h('li', { class: item.done ? 'done' : '', dataset: { itemId: item.id } },
+        edit ? h('span', { class: 'drag-handle', title: 'Ziehen zum Verschieben', 'aria-hidden': 'true' }, '⋮⋮') : null,
         h('input', { type: 'checkbox', checked: item.done, disabled: !edit, 'aria-label': item.text, onchange: act((e) => api.patch(`/checklist-items/${item.id}`, { done: e.target.checked })) }),
         text,
         h('span', { class: 'item-meta' },
           item.dueDate ? h('span', { class: `badge due due-${itemDue}` }, fmtDate(item.dueDate)) : null,
           assignee ? avatar(assignee, 'xs') : null),
-        more));
-    }
+        more);
+      if (edit) enableItemDrag(li, item.id);
+      ul.append(li);
+    });
 
     let addRow = null;
     if (edit) {
@@ -361,9 +365,64 @@ function checklistsBlock(edit) {
   return sec.childNodes.length ? sec : null;
 }
 
-function itemMenu(anchor, item) {
+// ---- Checklistenpunkte verschieben (Ziehen am Griff oder über das Menü) ----
+
+let dragItemId = null;
+let itemPlaceholder = null;
+
+function enableItemDrag(li, itemId) {
+  const handle = li.querySelector('.drag-handle');
+  // Nur am Griff ziehbar – so bleiben Klicks auf Text und Kästchen ungestört
+  handle.addEventListener('mousedown', () => { li.draggable = true; });
+  handle.addEventListener('touchstart', () => { li.draggable = true; }, { passive: true });
+  li.addEventListener('dragstart', (e) => {
+    dragItemId = itemId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `item:${itemId}`);
+    requestAnimationFrame(() => li.classList.add('dragging'));
+  });
+  li.addEventListener('dragend', () => {
+    li.draggable = false;
+    li.classList.remove('dragging');
+    itemPlaceholder?.remove();
+    itemPlaceholder = null;
+    dragItemId = null;
+  });
+}
+
+function enableItemDrop(ul, checklistId) {
+  ul.addEventListener('dragover', (e) => {
+    if (!dragItemId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!itemPlaceholder) itemPlaceholder = h('li', { class: 'item-placeholder' });
+    const rows = [...ul.querySelectorAll(':scope > li[data-item-id]:not(.dragging)')];
+    const after = rows.find((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if (after) ul.insertBefore(itemPlaceholder, after); else ul.append(itemPlaceholder);
+  });
+  ul.addEventListener('drop', async (e) => {
+    if (!dragItemId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const kids = [...ul.children].filter((el) => el === itemPlaceholder || (el.dataset.itemId && !el.classList.contains('dragging')));
+    const index = Math.max(0, kids.indexOf(itemPlaceholder));
+    const id = dragItemId;
+    itemPlaceholder?.remove();
+    itemPlaceholder = null;
+    dragItemId = null;
+    act(() => api.post(`/checklist-items/${id}/move`, { checklistId, index }))();
+  });
+}
+
+function itemMenu(anchor, item, cl, index) {
   const { members } = board();
+  const others = card.checklists.filter((x) => x.id !== cl.id);
+  const move = (checklistId, i) => act(() => api.post(`/checklist-items/${item.id}/move`, { checklistId, index: i }));
   popupMenu(anchor, [
+    { label: 'Nach oben', icon: 'arrowUp', disabled: index === 0, onClick: move(cl.id, index - 1) },
+    { label: 'Nach unten', icon: 'arrowDown', disabled: index === cl.items.length - 1, onClick: move(cl.id, index + 1) },
+    ...others.map((o) => ({ label: `In „${o.title}“ verschieben`, icon: 'checklist', onClick: move(o.id, o.items.length) })),
+    'sep',
     { label: 'Zuständige Person …', icon: 'user', onClick: () => pickMember(item) },
     { label: 'Fälligkeit …', icon: 'calendar', onClick: () => pickDate(item) },
     { label: 'In Karte umwandeln', icon: 'card', onClick: act(async () => { await api.post(`/checklist-items/${item.id}/to-card`); toast('Als Karte angelegt.'); }) },

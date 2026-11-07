@@ -74,6 +74,22 @@ test('Kartenlogik: anlegen, verschieben, Checkliste, Mitglieder, Archiv', async 
   card = (await a.get(`/api/cards/${c1.id}`)).data;
   assert.deepEqual(card.checklist, { done: 1, total: 3 });
 
+  // Punkte verschieben: innerhalb der Checkliste und in eine andere
+  const lists = async () => (await a.get(`/api/cards/${c1.id}`)).data.checklists;
+  const texts = async () => (await lists()).map((x) => x.items.map((i) => i.text));
+  const idOf = async (t) => (await lists()).flatMap((x) => x.items).find((i) => i.text === t).id;
+  await a.post(`/api/checklist-items/${await idOf('C')}/move`, { checklistId: cl.id, index: 0 });
+  assert.deepEqual(await texts(), [['C', 'A', 'B']]);
+  await a.post(`/api/checklist-items/${await idOf('C')}/move`, { checklistId: cl.id, index: 2 });
+  assert.deepEqual(await texts(), [['A', 'B', 'C']]);
+  const cl2 = (await a.post(`/api/cards/${c1.id}/checklists`, { title: 'Zweite', items: ['X'] })).data;
+  await a.post(`/api/checklist-items/${await idOf('B')}/move`, { checklistId: cl2.id, index: 0 });
+  assert.deepEqual(await texts(), [['A', 'C'], ['B', 'X']]);
+  await a.post(`/api/checklist-items/${await idOf('B')}/move`, { checklistId: cl.id, index: 1 });
+  assert.deepEqual(await texts(), [['A', 'B', 'C'], ['X']]);
+  await a.del(`/api/checklists/${cl2.id}`);
+  card = (await a.get(`/api/cards/${c1.id}`)).data;
+
   // Punkt → Karte
   const itemC = card.checklists[0].items[2];
   const conv = await a.post(`/api/checklist-items/${itemC.id}/to-card`);
