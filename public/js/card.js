@@ -1,6 +1,6 @@
 import { api } from './api.js';
 import {
-  h, clear, icon, toast, showError, openModal, confirmDialog, promptDialog, popupMenu, inlineEdit,
+  h, put, clear, icon, toast, showError, openModal, confirmDialog, promptDialog, popupMenu, inlineEdit,
   fmtDate, fmtDateTime, fmtSize, dueState, avatar, fmtWhen,
 } from './dom.js';
 import { state, navigate, describeActivity } from './state.js';
@@ -10,6 +10,9 @@ import { openBoardSettings } from './settings.js';
 import { renderMarkdown, renderInline, markdownToolbar, markdownShortcuts } from './markdown.js';
 
 let modal = null;
+
+/** Überschrift des Kartenfensters: die Liste, in der die Karte liegt. */
+const listTitle = () => board()?.lists.find((l) => l.id === card?.listId)?.title || board()?.board.title || '';
 let cardId = null;
 let card = null;
 let onChange = null;
@@ -31,7 +34,7 @@ export async function openCard(id, opts) {
     return;
   }
   modal = openModal({
-    title: board()?.board.title || '', wide: true, className: 'card-modal',
+    title: listTitle(), wide: true, className: 'card-modal',
     onClose: () => {
       const closedId = cardId;
       modal = null;
@@ -57,8 +60,8 @@ const act = (fn) => async (...args) => {
 function draw() {
   const scroll = modal.body.scrollTop;
   const edit = canEdit();
-  modal.setTitle(board().board.title);
-  clear(modal.body).append(coverHeader(edit), h('div', { class: 'card-detail' },
+  modal.setTitle(listTitle());
+  put(clear(modal.body), coverHeader(edit), h('div', { class: 'card-detail' },
     h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), linksBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
     h('aside', { class: 'card-side' }, sidebar(edit))));
   modal.body.scrollTop = scroll;
@@ -71,9 +74,7 @@ function titleBlock(edit) {
     t.addEventListener('click', (e) => { if (!e.target.closest('a')) go(); });
     t.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   }
-  const list = board().lists.find((l) => l.id === card.listId);
-  return h('div', {}, t, h('p', { class: 'muted small' }, 'in Liste ', h('strong', {}, list?.title || '–'),
-    card.creator ? ` · angelegt von ${card.creator} am ${fmtDateTime(card.createdAt)}` : ''));
+  return h('div', {}, t, card.creator ? h('p', { class: 'muted small' }, `angelegt von ${card.creator} am ${fmtDateTime(card.createdAt)}`) : null);
 }
 
 // ---------------- Titelbild ----------------
