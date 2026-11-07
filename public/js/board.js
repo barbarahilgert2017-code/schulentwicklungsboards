@@ -4,7 +4,7 @@ import {
   fmtDateShort, fmtDateTime, dueState, avatar, fmtWhen, fmtWhenShort,
 } from './dom.js';
 import { state, navigate, describeActivity } from './state.js';
-import { openCard, closeCardModal } from './card.js';
+import { openCard, closeCardModal, openCopyDialog } from './card.js';
 import { openBoardSettings } from './settings.js';
 import { openFilePicker } from './filepicker.js';
 import { renderInline } from './markdown.js';
@@ -303,14 +303,7 @@ function cardComposer(list) {
       ],
     }) : popupMenu(e.currentTarget, templates.map((t) => ({
       label: t.title, icon: 'card',
-      onClick: async () => {
-        try {
-          const made = await api.post(`/cards/${t.id}/copy`, { listId: list.id, title: t.title.replace(/^Vorlage:\s*/i, '') });
-          toast('Karte aus Vorlage erstellt.', 'success');
-          await refresh();
-          navigate(`#/board/${cur.boardId}/card/${made.id}`);
-        } catch (err) { showError(err); }
-      },
+      onClick: () => openCopyDialog({ source: { id: t.id, title: t.title, dueTime: t.dueTime }, boardId: cur.boardId, listId: list.id }),
     })))),
   }, icon('card', 14), ' aus Vorlage');
   const row = h('div', { class: 'composer-row' }, openBtn, tplBtn);

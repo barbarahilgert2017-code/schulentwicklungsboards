@@ -55,6 +55,13 @@ test('Vorlagenkarten: aus Vorlage erstellen, kopieren, nicht in Aufgaben/Statist
   const stats = (await c.get('/api/boards')).data.find((b) => b.id === boardId).stats;
   assert.equal(stats.overdue, 0, 'Vorlage zählt nicht als überfällig');
 
+  // Gleich mit Termin erstellen: ohne Uhrzeit gilt die der Vorlage, mit Uhrzeit die eigene
+  const withDate = (await c.post(`/api/cards/${tpl.id}/copy`, { listId: target.id, title: 'Sitzung Mai', dueDate: '2031-05-06' })).data;
+  assert.deepEqual([withDate.dueDate, withDate.dueTime], ['2031-05-06', '14:00']);
+  const ownTime = (await c.post(`/api/cards/${tpl.id}/copy`, { listId: target.id, dueDate: '2031-06-03', dueTime: '09:15' })).data;
+  assert.deepEqual([ownTime.dueDate, ownTime.dueTime], ['2031-06-03', '09:15']);
+  assert.equal((await c.post(`/api/cards/${tpl.id}/copy`, { dueDate: '03.06.2031' })).status, 400);
+
   // Beliebige Karte zur Vorlage machen und wieder zurück
   const normal = board.cards.find((x) => x.title === 'Schulprogramm fortschreiben');
   assert.equal((await c.patch(`/api/cards/${normal.id}`, { isTemplate: true })).data.isTemplate, true);

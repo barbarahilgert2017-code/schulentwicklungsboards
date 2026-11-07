@@ -159,9 +159,17 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
     const target = db.prepare('SELECT board_id, title FROM lists WHERE id = ?').get(listId);
     if (!target || target.board_id !== boardId) throw bad('Zielliste gehört nicht zu diesem Board.');
     const title = text(req.body.title, { name: 'Titel', max: 300 }) || undefined;
+    const dueDate = date(req.body.dueDate, 'Fälligkeitsdatum');
+    const dueTime = time(req.body.dueTime, 'Uhrzeit');
     const id = tx(db, () => {
       const newId = svc.copyCard(src.id, listId, req.user.id, { title, index: req.body.index === undefined ? undefined : int(req.body.index, 'Index') });
       svc.log(boardId, newId, req.user.id, 'card.created', { list: target.title, [src.is_template ? 'fromTemplate' : 'copyOf']: src.title });
+      if (dueDate) {
+        // Termin direkt setzen; ohne eigene Uhrzeit gilt die der Vorlage
+        const t = dueTime === undefined ? src.due_time : dueTime;
+        db.prepare('UPDATE cards SET due_date = ?, due_time = ? WHERE id = ?').run(dueDate, t, newId);
+        svc.log(boardId, newId, req.user.id, 'card.due', { due: dueDate, time: t });
+      }
       svc.touchBoard(boardId);
       return newId;
     });
