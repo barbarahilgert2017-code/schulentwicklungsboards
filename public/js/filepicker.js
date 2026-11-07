@@ -7,12 +7,16 @@ import { state } from './state.js';
  * @param {object} o
  * @param {number} [o.boardId]       Board, dessen Ordner durchsucht werden kann
  * @param {boolean} [o.boardFolder]  Board-Ordner vorhanden?
+ * @param {number} [o.cardId]        Karte mit eigenem Ordner (Reiter „Kartenordner“)
+ * @param {boolean} [o.cardFolder]   Kartenordner vorhanden?
+ * @param {boolean} [o.boardInFolderMode] Beim Ordner-Wählen auch den Board-Ordner anbieten
  * @param {'file'|'folder'|'browse'} o.mode
  * @param {(entry, source) => Promise<void>|void} [o.onPick]
  */
-export function openFilePicker({ boardId, boardFolder = false, mode = 'file', title, onPick, multiple = true }) {
+export function openFilePicker({ boardId, boardFolder = false, cardId, cardFolder = false, boardInFolderMode = false, mode = 'file', title, onPick, multiple = true }) {
   const sources = [];
-  if (boardFolder && mode !== 'folder') sources.push({ key: 'board', label: 'Board-Ordner' });
+  if (cardFolder && mode !== 'folder') sources.push({ key: 'card', label: 'Kartenordner' });
+  if (boardFolder && (mode !== 'folder' || boardInFolderMode)) sources.push({ key: 'board', label: 'Board-Ordner' });
   if (state.nextcloud) sources.push({ key: 'own', label: 'Meine Nextcloud' });
   if (!sources.length) {
     openModal({ title: 'Nextcloud', content: [h('p', {}, 'Bitte zuerst unter „Konto“ die Nextcloud verbinden.'), h('a', { class: 'btn btn-primary', href: '#/account' }, 'Zum Konto')] });
@@ -41,9 +45,10 @@ export function openFilePicker({ boardId, boardFolder = false, mode = 'file', ti
     listEl.replaceChildren(h('li', { class: 'muted' }, h('span', { class: 'spinner' }), ' Lädt …'));
     try {
       const q = newPath ? `?path=${encodeURIComponent(newPath)}` : '';
-      data = source === 'board' ? await api.get(`/boards/${boardId}/folder/files${q}`) : await api.get(`/nextcloud/files${q}`);
+      data = source === 'card' ? await api.get(`/cards/${cardId}/folder/files${q}`)
+        : source === 'board' ? await api.get(`/boards/${boardId}/folder/files${q}`) : await api.get(`/nextcloud/files${q}`);
       path = data.path;
-      root = source === 'board' ? data.root : '/';
+      root = source === 'own' ? '/' : data.root;
       draw();
     } catch (err) {
       listEl.replaceChildren(h('li', { class: 'form-error' }, err.message));
@@ -65,8 +70,8 @@ export function openFilePicker({ boardId, boardFolder = false, mode = 'file', ti
     clear(crumbs);
     const rel = root === '/' ? path : path.slice(root.length);
     const segs = rel.split('/').filter(Boolean);
-    const rootLabel = source === 'board' ? root.split('/').pop() : 'Nextcloud';
-    crumbs.append(h('button', { class: 'crumb', onclick: () => load(root) }, icon(source === 'board' ? 'folder' : 'cloud'), ` ${rootLabel}`));
+    const rootLabel = source === 'own' ? 'Nextcloud' : root.split('/').pop();
+    crumbs.append(h('button', { class: 'crumb', onclick: () => load(root) }, icon(source === 'own' ? 'cloud' : 'folder'), ` ${rootLabel}`));
     segs.forEach((s, i) => {
       const target = `${root === '/' ? '' : root}/${segs.slice(0, i + 1).join('/')}`;
       crumbs.append(h('span', { class: 'crumb-sep' }, '/'), h('button', { class: 'crumb', onclick: () => load(target) }, s));
@@ -75,12 +80,13 @@ export function openFilePicker({ boardId, boardFolder = false, mode = 'file', ti
     put(clear(toolbar),
       h('button', {
         class: 'btn btn-sm',
-        disabled: source === 'board' && state.boardRole === 'viewer',
+        disabled: source !== 'own' && state.boardRole === 'viewer',
         onclick: async () => {
           const name = await promptDialog('Neuer Ordner', { label: 'Ordnername', ok: 'Anlegen' });
           if (!name) return;
           try {
-            if (source === 'board') await api.post(`/boards/${boardId}/folder/folders`, { parent: path, name });
+            if (source === 'card') await api.post(`/cards/${cardId}/folder/folders`, { parent: path, name });
+            else if (source === 'board') await api.post(`/boards/${boardId}/folder/folders`, { parent: path, name });
             else await api.post('/nextcloud/folders', { parent: path, name });
             load(path);
           } catch (err) { showError(err); }

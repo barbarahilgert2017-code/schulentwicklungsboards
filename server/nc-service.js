@@ -35,7 +35,18 @@ export function createNcService({ db, config, box }) {
     return { client, root: b.nc_folder_path, ownerId: b.nc_folder_user_id };
   }
 
-  return { clientFor, account, folderClient };
+  /** Client für den eigenen Ordner einer Karte. */
+  function cardFolderClient(cardId) {
+    const c = db.prepare('SELECT nc_folder_user_id, nc_folder_path FROM cards WHERE id = ?').get(cardId);
+    if (!c?.nc_folder_path) throw new HttpError(409, 'Diese Karte hat noch keinen eigenen Nextcloud-Ordner.');
+    const client = clientFor(c.nc_folder_user_id, { required: false });
+    if (!client) {
+      throw new HttpError(409, 'Der Ordner der Karte ist nicht erreichbar: Die Person, die ihn verknüpft hat, hat ihre Nextcloud getrennt. Bitte den Ordner neu verknüpfen.');
+    }
+    return { client, root: c.nc_folder_path, ownerId: c.nc_folder_user_id };
+  }
+
+  return { clientFor, account, folderClient, cardFolderClient };
 }
 
 export const entryJson = (client, e) => ({

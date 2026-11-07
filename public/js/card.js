@@ -62,7 +62,7 @@ function draw() {
   const edit = canEdit();
   modal.setTitle(listTitle());
   put(clear(modal.body), coverHeader(edit), h('div', { class: 'card-detail' },
-    h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), linksBlock(edit), checklistsBlock(edit), attachmentsBlock(edit), commentsBlock()),
+    h('div', { class: 'card-main' }, templateBanner(edit), titleBlock(edit), metaRow(), descriptionBlock(edit), linksBlock(edit), checklistsBlock(edit), folderBlock(edit), attachmentsBlock(edit), commentsBlock()),
     h('aside', { class: 'card-side' }, sidebar(edit))));
   modal.body.scrollTop = scroll;
 }
@@ -394,6 +394,7 @@ function itemMenu(anchor, item) {
 
 function attachmentsBlock(edit) {
   const b = board().board;
+  const target = card.folder?.path || b.folder?.path || null; // Ziel für Uploads
   const items = card.attachmentList;
   const sec = h('section', { class: 'card-section' }, h('h4', {}, icon('clip'), ' Anhänge'));
   if (items.length) {
@@ -419,25 +420,69 @@ function attachmentsBlock(edit) {
     const fileInput = h('input', { type: 'file', multiple: true, hidden: true, onchange: (e) => uploadFiles([...e.target.files]) });
     const drop = h('div', { class: 'attach-actions' },
       h('button', { class: 'btn btn-sm', onclick: () => openFilePicker({
-        boardId: b.id, boardFolder: !!b.folder, mode: 'file',
+        boardId: b.id, boardFolder: !!b.folder, cardId: card.id, cardFolder: !!card.folder, mode: 'file',
         onPick: async (entry, source) => { await api.post(`/cards/${card.id}/attachments/nextcloud`, { path: entry.path, source }); await reload(); },
       }) }, icon('cloud'), ' Aus Nextcloud'),
       h('button', {
         class: 'btn btn-sm',
-        title: b.folder ? `Lädt in ${b.folder.path}` : 'Dieses Board hat noch keinen Nextcloud-Ordner',
-        onclick: () => (b.folder ? fileInput.click() : explainNoFolder()),
+        title: target ? `Lädt in ${target}` : 'Dieses Board hat noch keinen Nextcloud-Ordner',
+        onclick: () => (target ? fileInput.click() : explainNoFolder()),
       }, icon('upload'), ' Hochladen'),
       h('button', { class: 'btn btn-sm', onclick: addLink }, icon('link'), ' Link'),
       fileInput);
-    if (b.folder) {
+    if (target) {
       sec.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); sec.classList.add('drop-target'); } });
       sec.addEventListener('dragleave', () => sec.classList.remove('drop-target'));
       sec.addEventListener('drop', (e) => { e.preventDefault(); sec.classList.remove('drop-target'); uploadFiles([...e.dataTransfer.files]); });
-      sec.append(drop, h('p', { class: 'hint' }, `Dateien hierher ziehen, um sie im Board-Ordner (${b.folder.path}) zu speichern.`));
+      sec.append(drop, h('p', { class: 'hint' }, `Dateien hierher ziehen, um sie im ${card.folder ? 'Kartenordner' : 'Board-Ordner'} (${target}) zu speichern.`));
     } else {
       sec.append(drop);
     }
   }
+  return sec;
+}
+
+// ---------------- Eigener Nextcloud-Ordner der Karte ----------------
+
+function folderBlock(edit) {
+  const b = board().board;
+  const f = card.folder;
+  if (!f && !edit) return null;
+  const sec = h('section', { class: 'card-section' }, h('h4', {}, icon('folder'), ' Nextcloud-Ordner'));
+  if (f) {
+    sec.append(h('div', { class: 'card-folder' },
+      icon('folder', 22),
+      h('div', { class: 'card-folder-body' },
+        h('strong', {}, f.path.split('/').pop() || f.path),
+        h('span', { class: 'muted small' }, f.path, f.ownerName ? ` · verknüpft über ${f.ownerName}` : '')),
+      h('div', { class: 'card-folder-actions' },
+        f.link ? h('a', { class: 'btn btn-sm', href: f.link, target: '_blank', rel: 'noopener noreferrer' }, icon('external'), ' Öffnen') : null,
+        h('button', { class: 'btn btn-sm', onclick: () => openFilePicker({ cardId: card.id, cardFolder: true, mode: 'browse', title: `Kartenordner – ${f.path}` }) }, icon('folder'), ' Durchsuchen'),
+        edit ? h('button', {
+          class: 'icon-btn', 'aria-label': 'Ordner-Verknüpfung lösen', title: 'Verknüpfung lösen (der Ordner bleibt in der Nextcloud)',
+          onclick: async () => {
+            if (await confirmDialog('Verknüpfung zum Ordner lösen? Der Ordner und seine Dateien bleiben in der Nextcloud. Neue Uploads gehen dann wieder in den Board-Ordner.', { ok: 'Lösen' })) act(() => api.del(`/cards/${card.id}/folder`))();
+          },
+        }, icon('x')) : null)),
+      edit ? h('p', { class: 'hint' }, 'Uploads aus dieser Karte werden in diesem Ordner gespeichert.') : null);
+    return sec;
+  }
+  const canCreate = !!b.folder;
+  const pick = () => openFilePicker({
+    boardId: b.id, boardFolder: !!b.folder, boardInFolderMode: true, mode: 'folder', title: 'Ordner für diese Karte wählen',
+    onPick: async (entry, source) => { await api.put(`/cards/${card.id}/folder`, { path: entry.path, source }); toast('Ordner verknüpft.', 'success'); await reload(); },
+  });
+  sec.append(
+    h('p', { class: 'muted small' }, canCreate
+      ? 'Gib dieser Karte einen eigenen Ordner, z. B. für Unterlagen zu einer Sitzung. Uploads aus der Karte landen dann dort.'
+      : 'Gib dieser Karte einen eigenen Ordner aus deiner Nextcloud. Für „Ordner anlegen“ braucht das Board zuerst einen Board-Ordner.'),
+    h('div', { class: 'attach-actions' },
+      canCreate ? h('button', {
+        class: 'btn btn-sm btn-primary', title: `Legt „${b.folder.path}/${card.title}“ an`,
+        onclick: act(async () => { const r = await api.put(`/cards/${card.id}/folder`, { create: true }); toast(`Ordner „${r.path.split('/').pop()}“ angelegt.`, 'success'); }),
+      }, icon('plus'), ' Ordner anlegen') : null,
+      (canCreate || state.nextcloud) ? h('button', { class: 'btn btn-sm', onclick: pick }, icon('folder'), ' Vorhandenen Ordner wählen') : null,
+      !canCreate && !state.nextcloud ? h('a', { class: 'btn btn-sm', href: '#/account' }, 'Nextcloud verbinden') : null));
   return sec;
 }
 

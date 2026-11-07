@@ -26,6 +26,7 @@ export const describeActivity = (a) => {
     case 'card.deleted': return `hat die Karte „${d.title}“ gelöscht`;
     case 'card.renamed': return `hat die Karte umbenannt (vorher „${d.from}“)`;
     case 'card.due': return d.due ? `hat die Fälligkeit auf ${new Date(`${d.due}T00:00:00`).toLocaleDateString('de-DE')}${d.time ? `, ${d.time} Uhr` : ''} gesetzt` : 'hat die Fälligkeit entfernt';
+    case 'card.folder': return `hat der Karte den Nextcloud-Ordner „${d.path}“ zugeordnet`;
     case 'card.linked': return `hat die Karte mit „${d.title}“ verknüpft`;
     case 'card.unlinked': return `hat die Verknüpfung mit „${d.title}“ gelöst`;
     case 'card.template': return 'hat die Karte zur Vorlage gemacht';

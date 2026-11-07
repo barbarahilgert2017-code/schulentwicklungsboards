@@ -4,6 +4,7 @@ import { requireUser } from '../auth.js';
 import { HttpError, bad, text, date, time, int, bool, updateFields } from '../http.js';
 import { tx } from '../db.js';
 import { NextcloudError, cleanPath, joinPath, safeName, isInside } from '../nextcloud.js';
+import { entryJson } from '../nc-service.js';
 
 export default function cardRoutes({ db, config, nc, svc, access }) {
   const r = Router();
@@ -402,6 +403,10 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
       const f = nc.folderClient(boardId);
       if (f.client.serverUrl === att.nc_server && isInside(f.root, att.nc_path || '/')) out.push(f.client);
     } catch { /* kein Board-Ordner */ }
+    try {
+      const cf = nc.cardFolderClient(att.card_id);
+      if (cf.client.serverUrl === att.nc_server && isInside(cf.root, att.nc_path || '/')) out.unshift(cf.client);
+    } catch { /* kein Kartenordner */ }
     const own = nc.clientFor(att.added_by, { required: false });
     if (own && own.serverUrl === att.nc_server) out.push(own);
     return out;
@@ -450,9 +455,9 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
     const { boardId } = access.via('card', req.user, req.params.id, 'editor');
     const path = cleanPath(text(req.body.path, { name: 'Pfad', required: true, max: 1000 }));
     let client;
-    if (req.body.source === 'board') {
-      const f = nc.folderClient(boardId);
-      if (!isInside(f.root, path)) throw new HttpError(403, 'Außerhalb des Board-Ordners.');
+    if (req.body.source === 'board' || req.body.source === 'card') {
+      const f = req.body.source === 'card' ? nc.cardFolderClient(int(req.params.id)) : nc.folderClient(boardId);
+      if (!isInside(f.root, path)) throw new HttpError(403, 'Außerhalb des Ordners.');
       client = f.client;
     } else {
       client = nc.clientFor(req.user.id);
@@ -469,9 +474,11 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
     const size = Number(req.get('content-length'));
     if (!size) throw new HttpError(411, 'Dateigröße unbekannt.');
     if (size > config.uploadMaxMb * 1024 * 1024) throw new HttpError(413, `Datei zu groß (max. ${config.uploadMaxMb} MB).`);
-    const { client, root } = nc.folderClient(boardId);
+    // Hat die Karte einen eigenen Ordner, landen Uploads dort, sonst im Board-Ordner.
+    const hasCardFolder = !!db.prepare('SELECT nc_folder_path FROM cards WHERE id = ?').get(int(req.params.id))?.nc_folder_path;
+    const { client, root } = hasCardFolder ? nc.cardFolderClient(int(req.params.id)) : nc.folderClient(boardId);
     const folder = req.query.folder ? cleanPath(String(req.query.folder)) : root;
-    if (!isInside(root, folder)) throw new HttpError(403, 'Außerhalb des Board-Ordners.');
+    if (!isInside(root, folder)) throw new HttpError(403, 'Außerhalb des Ordners.');
     const name = await client.freeName(folder, safeName(String(req.query.name || ''), 'Datei'));
     const entry = await client.upload(joinPath(folder, name), Readable.toWeb(req), {
       size, contentType: req.get('content-type'),
@@ -479,6 +486,63 @@ export default function cardRoutes({ db, config, nc, svc, access }) {
     if (!entry) throw new NextcloudError('Upload konnte nicht bestätigt werden.');
     const id = addNcAttachment(boardId, int(req.params.id), req.user.id, client, entry);
     res.status(201).json({ id, path: entry.path });
+  });
+
+  // ---------------- Eigener Ordner pro Karte ----------------
+
+  // { create: true } → Unterordner im Board-Ordner anlegen; { path, source: 'board'|'own' } → vorhandenen verknüpfen
+  r.put('/cards/:id/folder', async (req, res) => {
+    const { boardId } = access.via('card', req.user, req.params.id, 'editor');
+    const id = int(req.params.id);
+    const c = cardRow(id);
+    let client; let ownerId; let entry;
+    if (req.body.create) {
+      const f = nc.folderClient(boardId);
+      client = f.client; ownerId = f.ownerId;
+      const name = await client.freeName(f.root, safeName(c.title, 'Karte'));
+      entry = await client.ensureFolder(joinPath(f.root, name));
+    } else {
+      const path = cleanPath(text(req.body.path, { name: 'Pfad', required: true, max: 1000 }));
+      if (req.body.source === 'board') {
+        const f = nc.folderClient(boardId);
+        if (!isInside(f.root, path)) throw new HttpError(403, 'Außerhalb des Board-Ordners.');
+        client = f.client; ownerId = f.ownerId;
+      } else {
+        client = nc.clientFor(req.user.id); ownerId = req.user.id;
+      }
+      entry = await client.stat(path);
+      if (!entry?.isDir) throw bad('Bitte einen Ordner auswählen.');
+      if (entry.path === '/') throw bad('Bitte einen Unterordner wählen, nicht die ganze Nextcloud.');
+    }
+    db.prepare("UPDATE cards SET nc_folder_path = ?, nc_folder_file_id = ?, nc_folder_user_id = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(entry.path, entry.fileId || null, ownerId, id);
+    svc.log(boardId, id, req.user.id, 'card.folder', { path: entry.path });
+    svc.touchBoard(boardId);
+    res.json({ path: entry.path, fileId: entry.fileId, link: client.fileLink(entry.fileId) });
+  });
+
+  r.delete('/cards/:id/folder', (req, res) => {
+    access.via('card', req.user, req.params.id, 'editor');
+    db.prepare('UPDATE cards SET nc_folder_path = NULL, nc_folder_file_id = NULL, nc_folder_user_id = NULL WHERE id = ?').run(int(req.params.id));
+    res.json({ ok: true });
+  });
+
+  r.get('/cards/:id/folder/files', async (req, res) => {
+    access.via('card', req.user, req.params.id);
+    const { client, root } = nc.cardFolderClient(int(req.params.id));
+    const path = req.query.path ? cleanPath(req.query.path) : root;
+    if (!isInside(root, path)) throw new HttpError(403, 'Außerhalb des Kartenordners.');
+    const { self, entries } = await client.list(path);
+    res.json({ root, path, self: self && entryJson(client, self), entries: entries.map((e) => entryJson(client, e)) });
+  });
+
+  r.post('/cards/:id/folder/folders', async (req, res) => {
+    access.via('card', req.user, req.params.id, 'editor');
+    const { client, root } = nc.cardFolderClient(int(req.params.id));
+    const parent = req.body.parent ? cleanPath(req.body.parent) : root;
+    if (!isInside(root, parent)) throw new HttpError(403, 'Außerhalb des Kartenordners.');
+    const entry = await client.ensureFolder(joinPath(parent, safeName(text(req.body.name, { name: 'Ordnername', required: true, max: 180 }))));
+    res.status(201).json(entryJson(client, entry));
   });
 
   r.delete('/attachments/:id', (req, res) => {

@@ -139,7 +139,7 @@ export function createBoardService(db) {
              (SELECT COUNT(*) FROM attachments a WHERE a.card_id = c.id) AS attachments,
              (SELECT COUNT(*) FROM comments co WHERE co.card_id = c.id) AS comments,
              (SELECT COUNT(*) FROM card_links k WHERE k.card_a = c.id OR k.card_b = c.id) AS links,
-             c.cover_attachment_id AS cover_id
+             c.cover_attachment_id AS cover_id, c.nc_folder_path IS NOT NULL AS has_folder
       FROM cards c WHERE ${where} ORDER BY c.position, c.id`).all(...params);
     if (!cards.length) return [];
     const ids = cards.map((c) => c.id);
@@ -158,7 +158,7 @@ export function createBoardService(db) {
       startTime: c.start_time, dueTime: c.due_time, isTemplate: !!c.is_template,
       completed: !!c.completed, archived: !!c.archived, hasDescription: !!c.has_desc,
       checklist: { done: c.items_done, total: c.items_total }, attachments: c.attachments, comments: c.comments, links: c.links,
-      coverId: c.cover_id || null,
+      coverId: c.cover_id || null, hasFolder: !!c.has_folder,
       labels: lab.get(c.id) || [], members: mem.get(c.id) || [],
     }));
   }
@@ -176,7 +176,9 @@ export function createBoardService(db) {
 
   function fullCard(cardId) {
     const [summary] = cardSummaries('c.id = ?', cardId);
-    const c = db.prepare('SELECT c.*, u.name AS creator FROM cards c LEFT JOIN users u ON u.id = c.created_by WHERE c.id = ?').get(cardId);
+    const c = db.prepare(`SELECT c.*, u.name AS creator, fu.name AS folder_owner, na.server_url AS folder_server
+                          FROM cards c LEFT JOIN users u ON u.id = c.created_by LEFT JOIN users fu ON fu.id = c.nc_folder_user_id
+                          LEFT JOIN nextcloud_accounts na ON na.user_id = c.nc_folder_user_id WHERE c.id = ?`).get(cardId);
     const checklists = db.prepare('SELECT id, title FROM checklists WHERE card_id = ? ORDER BY position, id').all(cardId);
     const itemStmt = db.prepare('SELECT id, text, done, assignee_id, due_date FROM checklist_items WHERE checklist_id = ? ORDER BY position, id');
     return {
@@ -186,6 +188,10 @@ export function createBoardService(db) {
       createdAt: c.created_at,
       updatedAt: c.updated_at,
       creator: c.creator,
+      folder: c.nc_folder_path ? {
+        path: c.nc_folder_path, fileId: c.nc_folder_file_id, ownerId: c.nc_folder_user_id, ownerName: c.folder_owner,
+        link: c.folder_server && c.nc_folder_file_id ? `${c.folder_server}/index.php/f/${encodeURIComponent(c.nc_folder_file_id)}` : null,
+      } : null,
       checklists: checklists.map((cl) => ({
         ...cl,
         items: itemStmt.all(cl.id).map((i) => ({ id: i.id, text: i.text, done: !!i.done, assigneeId: i.assignee_id, dueDate: i.due_date })),

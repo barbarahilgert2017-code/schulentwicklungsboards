@@ -276,6 +276,7 @@ function cardTile(c) {
     c.comments ? h('span', { class: 'badge-plain', title: 'Kommentare' }, icon('comment', 13), ` ${c.comments}`) : null,
     c.attachments ? h('span', { class: 'badge-plain', title: 'Anhänge' }, icon('clip', 13), ` ${c.attachments}`) : null,
     c.links ? h('span', { class: 'badge-plain', title: 'Verknüpfte Karten' }, icon('link', 13), ` ${c.links}`) : null,
+    c.hasFolder ? h('span', { class: 'badge-plain', title: 'Eigener Nextcloud-Ordner' }, icon('folder', 13)) : null,
     c.members.length ? h('span', { class: 'card-members' }, c.members.map((id) => members.find((m) => m.id === id)).filter(Boolean).map((m) => avatar(m, 'xs'))) : null));
 
   if (canEdit()) {

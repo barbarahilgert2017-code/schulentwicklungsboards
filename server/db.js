@@ -225,6 +225,12 @@ const MIGRATIONS = [
   `
   ALTER TABLE cards ADD COLUMN cover_attachment_id INTEGER REFERENCES attachments(id) ON DELETE SET NULL;
   `,
+  // 8: Eigener Nextcloud-Ordner pro Karte
+  `
+  ALTER TABLE cards ADD COLUMN nc_folder_path TEXT;
+  ALTER TABLE cards ADD COLUMN nc_folder_file_id TEXT;
+  ALTER TABLE cards ADD COLUMN nc_folder_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+  `,
 ];
 
 export function openDb(file) {

@@ -7,6 +7,7 @@ Ein schlankes, selbst gehostetes Kanban-Werkzeug (Trello-ähnlich) für **Schule
 **Boards, Listen, Karten**
 - Boards mit frei benennbaren Listen; Karten per Drag & Drop verschieben (Karten und Listen) – auf Tablets alternativ über „Verschieben“ im Karten-Dialog
 - Karten mit Beschreibung, Labels, Zuständigen, Start- und Fälligkeitsdatum, Erledigt-Status, Kommentaren, Anhängen und Verlauf
+- **Eigener Nextcloud-Ordner pro Karte**: im Board-Ordner anlegen (Name der Karte) oder vorhandenen Ordner verknüpfen; Uploads aus der Karte landen dort, Ordner in der App durchsuchen oder in der Nextcloud öffnen
 - **Titelbilder**: Das erste angehängte Bild wird automatisch Titelbild (groß oben in der Karte, klein auf der Kachel); per Knopf wechseln oder entfernen. Die Vorschau kommt aus der Nextcloud und wird kurz zwischengespeichert – Dateien bleiben in der Nextcloud
 - **Verknüpfte Karten**: Karten untereinander verknüpfen – auch über Boards hinweg, in beide Richtungen; sichtbar nur für Personen mit Zugang zu beiden Boards. „Link zur Karte kopieren“ für Beschreibungen und Kommentare
 - **Vorlagenkarten**: Karten als Vorlage markieren (z. B. „Sitzung“ mit Checklisten) und daraus per „aus Vorlage“ neue Karten erstellen; Karten kopieren
