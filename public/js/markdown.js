@@ -211,7 +211,7 @@ export function markdownToolbar(ta) {
     const lineEnd = value.indexOf('\n', e) === -1 ? value.length : value.indexOf('\n', e);
     const lines = value.slice(lineStart, lineEnd).split('\n');
     const next = lines.map((l, n) => fn(l, n)).join('\n');
-    ta.setRangeText(next, lineStart, lineEnd, 'end');
+    ta.setRangeText(next, lineStart, lineEnd, 'end'); // Cursor ans Zeilenende → einfach weiterschreiben, Enter setzt die Liste fort
     ta.focus();
     ta.dispatchEvent(new Event('input'));
   };
@@ -255,8 +255,69 @@ export function markdownToolbar(ta) {
 }
 
 /** Tastenkürzel Strg/Cmd+B und Strg/Cmd+I für ein Textfeld. */
+const LIST_ITEM = /^(\s*)([-*+]|(\d{1,3})([.)]))(\s+)(\[[ xX]\]\s+)?/;
+
+/**
+ * Aufzählungen bleiben aktiv: Enter setzt den nächsten Punkt fort (- / 2. / - [ ]),
+ * Enter in einem leeren Punkt beendet die Liste, Tab / Umschalt+Tab rücken ein bzw. aus.
+ * Umschalt+Enter macht einen normalen Zeilenumbruch.
+ */
+function listKeys(ta, e) {
+  if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const { selectionStart: s, selectionEnd: en, value } = ta;
+  const lineStart = value.lastIndexOf('\n', s - 1) + 1;
+  const nl = value.indexOf('\n', s);
+  const lineEnd = nl === -1 ? value.length : nl;
+  const line = value.slice(lineStart, lineEnd);
+  const m = LIST_ITEM.exec(line);
+  if (!m) return false;
+
+  if (e.key === 'Enter' && e.shiftKey && s === en) {
+    // Zeilenumbruch innerhalb desselben Punkts: so weit einrücken wie der Text des Punkts
+    ta.setRangeText(`\n${' '.repeat(m[0].length)}`, s, s, 'end');
+    return true;
+  }
+  if (e.key === 'Enter' && !e.shiftKey && s === en) {
+    const prefixLen = m[0].length;
+    if (s < lineStart + prefixLen) return false; // Cursor steht im Aufzählungszeichen
+    const content = line.slice(prefixLen).trim();
+    if (!content) {
+      // Leerer Punkt: eingerückt → eine Ebene ausrücken, sonst Liste beenden
+      if (m[1].length >= 2) ta.setRangeText(line.slice(2), lineStart, lineEnd, 'end');
+      else ta.setRangeText('', lineStart, lineEnd, 'end');
+      return true;
+    }
+    const marker = m[3] ? `${Number(m[3]) + 1}${m[4]}` : m[2];
+    const task = m[6] ? '[ ] ' : '';
+    ta.setRangeText(`\n${m[1]}${marker}${m[5]}${task}`, s, s, 'end');
+    return true;
+  }
+  if (e.key === 'Tab') {
+    const pos = s - lineStart;
+    if (e.shiftKey) {
+      const remove = Math.min(2, m[1].length);
+      if (!remove) return true; // schon ganz links – Fokus trotzdem im Feld lassen
+      ta.setRangeText(line.slice(remove), lineStart, lineEnd, 'preserve');
+      ta.setSelectionRange(lineStart + Math.max(0, pos - remove), lineStart + Math.max(0, pos - remove));
+    } else {
+      // Unterpunkte nummerierter Listen beginnen wieder bei 1.
+      const renumbered = m[3] ? line.replace(/^(\s*)\d{1,3}/, '$11') : line;
+      ta.setRangeText(`  ${renumbered}`, lineStart, lineEnd, 'preserve');
+      const delta = 2 + renumbered.length - line.length;
+      ta.setSelectionRange(s + delta, s + delta);
+    }
+    return true;
+  }
+  return false;
+}
+
 export function markdownShortcuts(ta) {
   ta.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === 'Tab') && listKeys(ta, e)) {
+      e.preventDefault();
+      ta.dispatchEvent(new Event('input'));
+      return;
+    }
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const key = e.key.toLowerCase();
     if (key !== 'b' && key !== 'i') return;
